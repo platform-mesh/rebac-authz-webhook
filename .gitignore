@@ -1,0 +1,14 @@
+bin/
+ssl
+config/*
+!config/*.sh
+!config/*.yaml
+!config/*.conf
+.idea
+.vscode
+.local
+__debug_bin*
+*.out
+.env
+.secret
+token
