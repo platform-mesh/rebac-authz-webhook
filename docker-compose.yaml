@@ -1,0 +1,23 @@
+services:
+  openfga:
+    image: openfga/openfga
+    ports:
+      - 8081:8081
+      - 8080:8080
+      # - 3000:3000
+    command:
+    - run
+  
+  openfga_migrate:
+    depends_on: [openfga]
+    image: openfga/cli
+    volumes:
+      - .:/schema
+    environment:
+    - FGA_API_URL=http://openfga:8080
+    - HOME="/"
+    command:
+    - store
+    - import
+    - --file
+    - /schema/store.yaml

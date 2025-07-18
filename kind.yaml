@@ -1,0 +1,29 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    metadata:
+      name: config
+    apiServer:
+      extraArgs:
+        authorization-mode: "RBAC,Webhook"
+        authorization-webhook-config-file: "/config/authz.yaml"
+        authorization-webhook-cache-authorized-ttl: "1s" # only so low for testing
+        authorization-webhook-cache-unauthorized-ttl: "1s" # only so low for testing
+        authorization-webhook-version: v1
+
+      extraVolumes:
+      - name: api-server-basic-auth-files
+        hostPath: "/config"
+        mountPath: "/config"
+        readOnly: true
+nodes:
+- role: control-plane
+  extraMounts:
+  - hostPath: /Users/I547291/Documents/Development/ams-pro/authz-webook/config
+    containerPath: /config
+
+# authentication-token-webhook-config-file: "/config/authn.yaml"
+# authentication-token-webhook-cache-ttl: "1s" # only so low for testing
+# authentication-token-webhook-version: v1

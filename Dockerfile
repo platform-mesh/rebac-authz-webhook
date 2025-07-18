@@ -1,0 +1,19 @@
+FROM golang:1.24 AS builder
+
+ENV GOSUMDB=off
+
+WORKDIR /app
+
+COPY go.mod go.mod
+COPY go.sum go.sum
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o rebac-authz-webhook main.go
+
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /app/rebac-authz-webhook /app/rebac-authz-webhook
+USER 65532:65532
+
+ENTRYPOINT ["/app/rebac-authz-webhook"]
