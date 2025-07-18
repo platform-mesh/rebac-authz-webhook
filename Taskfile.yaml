@@ -47,8 +47,10 @@ tasks:
     env:
       GOPRIVATE: github.com/platform-mesh
       GO111MODULE: on
-      PLATFORMMESH_TOKEN: ${PLATFORMMESH_TOKEN}
+      PLATFORM_MESH_TOKEN: ${PLATFORM_MESH_TOKEN}
     cmds:
+      - echo "https://openmfp:$PLATFORM_MESH_TOKEN@github.com" >> $HOME/.git-credentials
+      - git config --global url."https://${PLATFORM_MESH_TOKEN}@github.com/".insteadOf "https://github.com/"
       - go test -count=1 ./... {{.ADDITIONAL_COMMAND_ARGS}}
   cover:
     cmds:
