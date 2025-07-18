@@ -41,8 +41,14 @@ tasks:
   lint:
     deps: [setup:golangci-lint]
     cmds:
+      - echo "https://openmfp:$PLATFORM_MESH_TOKEN@github.com" >> $HOME/.git-credentials
+      - git config --global url."https://${PLATFORM_MESH_TOKEN}@github.com/".insteadOf "https://github.com/"
       - task: fmt
       - "{{.LOCAL_BIN}}/golangci-lint run --timeout 15m ./..."
+    env:
+      GOPRIVATE: github.com/platform-mesh
+      GO111MODULE: on
+      PLATFORM_MESH_TOKEN: ${PLATFORM_MESH_TOKEN}
   test:
     env:
       GOPRIVATE: github.com/platform-mesh
