@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
@@ -61,6 +62,16 @@ func (a *AuthorizationHandler) getAccountInfo(ctx context.Context, sar authoriza
 	if err != nil {
 		log.Error().Err(err).Str("cluster", clusterNameAttr[0]).Msg("Failed to get cluster")
 		return nil, errors.Join(err, ErrNoStoreID)
+	}
+
+	if isAccountCreationRequest(sar) {
+		storeId, err := a.getStoreId("orgs")
+		if err != nil {
+			log.Error().Err(err).Msg("OpenFGA error getting store ID")
+			return nil, errors.Join(err, ErrNoStoreID)
+		}
+		info.Spec.FGA.Store.Id = storeId
+		return info, nil
 	}
 
 	if err := cluster.GetClient().Get(ctx, types.NamespacedName{Name: a.accountInfoName}, info); err != nil {
@@ -239,6 +250,11 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if isAccountCreationRequest(sar) {
+		object = "role:authenticated"
+		relation = "assignee"
+	}
+
 	preReq := time.Now()
 	res, err := a.fga.Check(r.Context(), &openfgav1.CheckRequest{
 		StoreId: accountInfo.Spec.FGA.Store.Id,
@@ -282,4 +298,25 @@ func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
 	if err := json.NewEncoder(w).Encode(&sar); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func isAccountCreationRequest(sar authorizationv1.SubjectAccessReview) bool {
+	return sar.Spec.ResourceAttributes != nil &&
+		sar.Spec.ResourceAttributes.Group == "core.platform-mesh.io" &&
+		sar.Spec.ResourceAttributes.Resource == "accounts" &&
+		sar.Spec.ResourceAttributes.Verb == "create"
+}
+
+func (a *AuthorizationHandler) getStoreId(storeName string) (string, error) {
+	stores, err := a.fga.ListStores(context.TODO(), &openfgav1.ListStoresRequest{})
+	if err != nil {
+		return "", err
+	}
+
+	for _, store := range stores.Stores {
+		if store.Name == storeName {
+			return store.Id, nil
+		}
+	}
+	return "", fmt.Errorf("store %s doesn't exist", storeName)
 }
