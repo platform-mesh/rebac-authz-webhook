@@ -38,6 +38,8 @@ var (
 	})
 )
 
+const rootOrgName = "tenancy_kcp_io_workspace:orgs"
+
 func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string) (*AuthorizationHandler, error) {
 
 	return &AuthorizationHandler{
@@ -62,16 +64,6 @@ func (a *AuthorizationHandler) getAccountInfo(ctx context.Context, sar authoriza
 	if err != nil {
 		log.Error().Err(err).Str("cluster", clusterNameAttr[0]).Msg("Failed to get cluster")
 		return nil, errors.Join(err, ErrNoStoreID)
-	}
-
-	if isAccountCreationRequest(sar) {
-		storeId, err := a.getStoreId("orgs")
-		if err != nil {
-			log.Error().Err(err).Msg("OpenFGA error getting store ID")
-			return nil, errors.Join(err, ErrNoStoreID)
-		}
-		info.Spec.FGA.Store.Id = storeId
-		return info, nil
 	}
 
 	if err := cluster.GetClient().Get(ctx, types.NamespacedName{Name: a.accountInfoName}, info); err != nil {
@@ -250,9 +242,10 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// if we manage to understand that the request is in org scope by extracting kcp workspace
+	// this logic will be replaced by workspace path determination way
 	if isAccountCreationRequest(sar) {
-		object = "role:authenticated"
-		relation = "assignee"
+		object = rootOrgName
 	}
 
 	preReq := time.Now()
