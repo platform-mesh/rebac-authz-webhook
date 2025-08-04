@@ -116,10 +116,12 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	log.Debug().Str("sar", fmt.Sprintf("%+v", sar)).Msg("Received SubjectAccessReview")
+
 	// For resource attributes, we need to get the store ID
 	accountInfo, err := a.getAccountInfo(r.Context(), sar)
 	if err != nil {
-		log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info")
+		log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info, responding with no opinion")
 		noOpinion(w, sar)
 		return
 	}
@@ -206,7 +208,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 				User:     fmt.Sprintf("core_platform-mesh_io_account:%s/%s", accountInfo.Spec.Account.OriginClusterId, accountInfo.Spec.Account.Name),
 			})
 		} else {
-			object = fmt.Sprintf("%s_%s:%s/%s", groupForType, resourceType, accountInfo.Spec.Account.OriginClusterId, accountInfo.Spec.Account.Name)
+			object = fmt.Sprintf("core_platform-mesh_io_account:%s/%s", accountInfo.Spec.Account.OriginClusterId, accountInfo.Spec.Account.Name)
 		}
 	} else {
 		object = fmt.Sprintf("%s:%s/%s", objectType, clusterName, objectName)
