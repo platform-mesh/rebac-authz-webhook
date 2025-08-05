@@ -29,6 +29,15 @@ task mockery
 ``` 
 P.S. If you have golang installed, it automatically installs the mockery binary in `golang-commons/bin` directory.
 
+
+## Debugging using telepresence against local kind cluster
+
+- Install Telepresence as outlined in their documentation [link](https://telepresence.io/docs/quick-start)
+- Point your kubeconfig against the local kind cluster
+- Start the webhook locally using the kcp kubeconfig from the kind cluster. you may need to adjust the domain to (kcp.api.portal.dev.local:8443)
+- Connect telepresense to the openmfp-system namespace: `telepresence connect -n openmfp-system`
+- Start intercepting traffic to the webhook using: `telepresence intercept rebac-authz-webhook --port 9443:9443`
+
 ## Issues
 We use GitHub issues to track bugs. Please ensure your description is
 clear and includes sufficient instructions to reproduce the issue.
