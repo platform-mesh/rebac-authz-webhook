@@ -116,6 +116,12 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	log = log.ChildLogger("resourceAttributes", sar.Spec.ResourceAttributes.String()).
+		ChildLogger("group", sar.Spec.ResourceAttributes.Group).
+		ChildLogger("resource", sar.Spec.ResourceAttributes.Resource).
+		ChildLogger("subresource", sar.Spec.ResourceAttributes.Subresource).
+		ChildLogger("verb", sar.Spec.ResourceAttributes.Verb)
+
 	log.Debug().Str("sar", fmt.Sprintf("%+v", sar)).Msg("Received SubjectAccessReview")
 
 	// For resource attributes, we need to get the store ID
@@ -125,12 +131,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		noOpinion(w, sar)
 		return
 	}
-
-	log = log.ChildLogger("resourceAttributes", sar.Spec.ResourceAttributes.String()).
-		ChildLogger("group", sar.Spec.ResourceAttributes.Group).
-		ChildLogger("resource", sar.Spec.ResourceAttributes.Resource).
-		ChildLogger("subresource", sar.Spec.ResourceAttributes.Subresource).
-		ChildLogger("verb", sar.Spec.ResourceAttributes.Verb)
 
 	group := util.CapGroupToRelationLength(sar, 50)
 	group = strings.ReplaceAll(group, ".", "_")
@@ -142,6 +142,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			clusterName = clusterNames[0]
 		}
 	}
+	log = log.ChildLogger("clusterName", clusterName)
 
 	var namespaced bool
 	var gvk schema.GroupVersionKind
@@ -160,16 +161,18 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	gvk, err = restMapper.KindFor(schema.GroupVersionResource{
+	gvr := schema.GroupVersionResource{
 		Group:    sar.Spec.ResourceAttributes.Group,
 		Resource: sar.Spec.ResourceAttributes.Resource,
 		Version:  sar.Spec.ResourceAttributes.Version,
-	})
+	}
+	gvk, err = restMapper.KindFor(gvr)
 	if err != nil {
-		log.Error().Err(err).Msg("error getting GVK")
+		log.Error().Err(err).Str("gvr", fmt.Sprintf("%+v", gvr)).Msg("error getting GVK")
 		noOpinion(w, sar)
 		return
 	}
+	log.Debug().Str("gvr", fmt.Sprintf("%+v", gvr)).Str("gvk", fmt.Sprintf("%+v", gvk)).Msg("Got GVK")
 
 	namespaced, err = apiutil.IsGVKNamespaced(gvk, restMapper)
 	if err != nil {
@@ -178,7 +181,12 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	groupForType := strings.ReplaceAll(sar.Spec.ResourceAttributes.Group, ".", "_")
+	var groupForType string
+	if sar.Spec.ResourceAttributes.Group == "" {
+		groupForType = "core"
+	} else {
+		groupForType = strings.ReplaceAll(sar.Spec.ResourceAttributes.Group, ".", "_")
+	}
 	resourceType := sar.Spec.ResourceAttributes.Resource
 
 	if singularResource, err := restMapper.ResourceSingularizer(sar.Spec.ResourceAttributes.Resource); err == nil {
@@ -233,7 +241,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	log.Debug().Str("object", object).Str("relation", relation).Any("contextualTuples", contextualTuples).Msg("ruleless mode, using contextual tuples")
+	log.Debug().Str("object", object).Str("relation", relation).Any("contextualTuples", contextualTuples).Msg("check call elements")
 
 	if a.fga == nil {
 		log.Warn().Msg("FGA client is nil, returning no opinion")
@@ -260,7 +268,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		noOpinion(w, sar)
 		return
 	}
-	log.Info().Bool("allowed", res.Allowed).Str("user", sar.Spec.User).Str("object", object).Str("relation", relation).Msg("sar response")
+	log.Info().Str("allowed", fmt.Sprintf("%t", res.Allowed)).Str("user", sar.Spec.User).Str("object", object).Str("relation", relation).Msg("sar response")
 	if !res.Allowed {
 		noOpinion(w, sar)
 		return
