@@ -19,6 +19,9 @@ func CapGroupToRelationLength(sar authorizationv1.SubjectAccessReview, maxLength
 	maxRelation := fmt.Sprintf("create_%s_%s", sar.Spec.ResourceAttributes.Group, sar.Spec.ResourceAttributes.Resource)
 
 	group := sar.Spec.ResourceAttributes.Group
+	if group == "" {
+		group = "core"
+	}
 
 	if len(maxRelation) > maxLength {
 		return group[len(maxRelation)-maxLength:]

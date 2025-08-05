@@ -11,10 +11,12 @@ replace (
 
 require (
 	github.com/go-logr/logr v1.4.3
+	github.com/kcp-dev/kcp/pkg/client v0.0.0-20230328080949-0f3bb69fdc08
 	github.com/kcp-dev/kcp/sdk v0.27.1
+	github.com/kcp-dev/logicalcluster/v3 v3.0.5
 	github.com/kcp-dev/multicluster-provider v0.1.0
 	github.com/openfga/api/proto v0.0.0-20250528161632-e53c69cc5531
-	github.com/platform-mesh/account-operator v0.1.8
+	github.com/platform-mesh/account-operator v0.1.12
 	github.com/platform-mesh/golang-commons v0.1.5
 	github.com/prometheus/client_golang v1.22.0
 	github.com/spf13/cobra v1.9.1
@@ -22,10 +24,11 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.62.0
 	golang.org/x/oauth2 v0.30.0
-	google.golang.org/grpc v1.74.0
-	k8s.io/api v0.33.2
-	k8s.io/apimachinery v0.33.2
-	k8s.io/client-go v0.33.2
+	google.golang.org/grpc v1.74.2
+	k8s.io/api v0.33.3
+	k8s.io/apimachinery v0.33.3
+	k8s.io/client-go v0.33.3
+	k8s.io/klog/v2 v2.130.1
 	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/multicluster-runtime v0.20.4-alpha.7
 )
@@ -62,7 +65,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kcp-dev/apimachinery/v2 v2.0.1-0.20250223115924-431177b024f3 // indirect
-	github.com/kcp-dev/logicalcluster/v3 v3.0.5 // indirect
+	github.com/kcp-dev/kcp/pkg/apis v0.11.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -110,8 +113,7 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.33.0 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
+	k8s.io/apiextensions-apiserver v0.33.3 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
