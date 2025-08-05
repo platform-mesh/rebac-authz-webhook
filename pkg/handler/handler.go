@@ -178,12 +178,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var groupForType string
-	if sar.Spec.ResourceAttributes.Group == "" {
-		groupForType = "core"
-	} else {
-		groupForType = strings.ReplaceAll(sar.Spec.ResourceAttributes.Group, ".", "_")
-	}
 	resourceType := sar.Spec.ResourceAttributes.Resource
 
 	if singularResource, err := restMapper.ResourceSingularizer(sar.Spec.ResourceAttributes.Resource); err == nil {
@@ -191,7 +185,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		log.Debug().Str("resource", sar.Spec.ResourceAttributes.Resource).Str("singular", resourceType).Msg("Converted resource to singular form")
 	}
 
-	objectType := fmt.Sprintf("%s_%s", groupForType, resourceType)
+	objectType := fmt.Sprintf("%s_%s", group, resourceType)
 
 	longestObjectType := fmt.Sprintf("create_%ss", objectType)
 	if len(longestObjectType) > 50 {
