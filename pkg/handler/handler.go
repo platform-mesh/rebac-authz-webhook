@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kcp-dev/logicalcluster/v3"
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	corev1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/platform-mesh/golang-commons/logger"
 
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/mapperprovider"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
 )
 
@@ -27,6 +29,7 @@ type AuthorizationHandler struct {
 	fga             openfgav1.OpenFGAServiceClient
 	accountInfoName string
 	mgr             mcmanager.Manager
+	mps             *mapperprovider.MapperProviders
 }
 
 var (
@@ -37,12 +40,13 @@ var (
 	})
 )
 
-func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string) (*AuthorizationHandler, error) {
+func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string, mps *mapperprovider.MapperProviders) (*AuthorizationHandler, error) {
 
 	return &AuthorizationHandler{
 		fga:             fga,
 		accountInfoName: accountInfoName,
 		mgr:             mgr,
+		mps:             mps,
 	}, nil
 }
 
@@ -147,15 +151,8 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	var namespaced bool
 	var gvk schema.GroupVersionKind
 
-	cluster, err := a.mgr.GetCluster(r.Context(), clusterName)
-	if err != nil {
-		log.Error().Err(err).Str("cluster", clusterName).Msg("error getting cluster")
-		noOpinion(w, sar)
-		return
-	}
-
-	restMapper := cluster.GetRESTMapper()
-	if err != nil {
+	restMapper, ok := a.mps.GetMapper(logicalcluster.Name(clusterName))
+	if !ok {
 		log.Error().Err(err).Msg("error getting provider")
 		noOpinion(w, sar)
 		return

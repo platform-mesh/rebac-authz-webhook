@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -27,6 +28,7 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/client"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/mapperprovider"
 )
 
 var (
@@ -56,7 +58,9 @@ func serve() { // coverage-ignore
 		return otelhttp.NewTransport(rt)
 	})
 
-	mgr, provider := initializeMultiClusterManager(ctx, restCfg, log, serverCfg, defaultCfg)
+	mps := mapperprovider.New()
+
+	mgr, provider := initializeMultiClusterManager(ctx, restCfg, log, serverCfg, defaultCfg, mps)
 	fga := client.MustCreateInClusterClient(serverCfg.OpenFGA.Addr)
 
 	kcpScheme := runtime.NewScheme()
@@ -66,7 +70,7 @@ func serve() { // coverage-ignore
 	srv := mgr.GetWebhookServer()
 	cmw := &ContextMiddleware{Logger: log}
 
-	authHandler, err := handler.NewAuthorizationHandler(fga, mgr, serverCfg.Kcp.AccountInfoName)
+	authHandler, err := handler.NewAuthorizationHandler(fga, mgr, serverCfg.Kcp.AccountInfoName, mps)
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not create authorization handler")
 	}
@@ -93,7 +97,7 @@ func serve() { // coverage-ignore
 
 }
 
-func initializeMultiClusterManager(ctx context.Context, restCfg *rest.Config, log *logger.Logger, serviceCfg config.Config, defaultConfig *commonconfig.CommonServiceConfig) (mcmanager.Manager, *apiexport.Provider) {
+func initializeMultiClusterManager(ctx context.Context, restCfg *rest.Config, log *logger.Logger, serviceCfg config.Config, defaultConfig *commonconfig.CommonServiceConfig, mps *mapperprovider.MapperProviders) (mcmanager.Manager, *apiexport.Provider) {
 	log.Info().Msg("Initializing multicluster manager")
 	kubeconfigPath := serviceCfg.Kcp.KubeconfigPath
 	kcpCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
@@ -108,8 +112,21 @@ func initializeMultiClusterManager(ctx context.Context, restCfg *rest.Config, lo
 		kcpCfg.Host = serverCfg.Kcp.ClusterURL
 	}
 
-	provider, err := apiexport.New(kcpCfg, apiexport.Options{
+	wildcardCache, err := apiexport.NewWildcardCache(kcpCfg, cache.Options{
 		Scheme: scheme,
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("unable to create wildcard cache")
+	}
+
+	err = mapperprovider.Run(ctx, kcpCfg, mps, wildcardCache, log)
+	if err != nil {
+		log.Fatal().Err(err).Msg("unable to run mapper provider")
+	}
+
+	provider, err := apiexport.New(kcpCfg, apiexport.Options{
+		WildcardCache: wildcardCache,
+		Scheme:        scheme,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to construct cluster provider")
