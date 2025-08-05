@@ -84,7 +84,7 @@ func serve() { // coverage-ignore
 		log.Fatal().Err(err).Msg("cannot get organization's workspace ID")
 	}
 
-	orgsStoreID, err := getOrgStoreID(fga, "orgs")
+	orgsStoreID, err := getOrgStoreID(ctx, fga, "orgs")
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot get organization's store ID")
 	}
@@ -220,8 +220,8 @@ func getOrgWorkspaceID(ctx context.Context, serviceCfg config.Config) (string, e
 	return orgWorkspace.Spec.Cluster, nil
 }
 
-func getOrgStoreID(fga openfgav1.OpenFGAServiceClient, storeName string) (string, error) {
-	stores, err := fga.ListStores(context.TODO(), &openfgav1.ListStoresRequest{})
+func getOrgStoreID(ctx context.Context, fga openfgav1.OpenFGAServiceClient, storeName string) (string, error) {
+	stores, err := fga.ListStores(ctx, &openfgav1.ListStoresRequest{})
 	if err != nil {
 		return "", err
 	}

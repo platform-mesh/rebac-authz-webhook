@@ -126,14 +126,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// For resource attributes, we need to get the store ID
-	accountInfo, err := a.getAccountInfo(r.Context(), sar)
-	if err != nil {
-		log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info")
-		noOpinion(w, sar)
-		return
-	}
-
 	log = log.ChildLogger("resourceAttributes", sar.Spec.ResourceAttributes.String()).
 		ChildLogger("group", sar.Spec.ResourceAttributes.Group).
 		ChildLogger("resource", sar.Spec.ResourceAttributes.Resource).
@@ -142,10 +134,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	log.Debug().Str("sar", fmt.Sprintf("%+v", sar)).Msg("Received SubjectAccessReview")
 
-	group := util.CapGroupToRelationLength(sar, 50)
-	group = strings.ReplaceAll(group, ".", "_")
-	relation := sar.Spec.ResourceAttributes.Verb
-
 	var clusterName string
 	if sar.Spec.Extra != nil {
 		if clusterNames, exists := sar.Spec.Extra["authorization.kubernetes.io/cluster-name"]; exists && len(clusterNames) > 0 {
@@ -153,6 +141,44 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	log = log.ChildLogger("clusterName", clusterName)
+
+	group := util.CapGroupToRelationLength(sar, 50)
+	group = strings.ReplaceAll(group, ".", "_")
+	relation := sar.Spec.ResourceAttributes.Verb
+
+	var accountInfo *corev1alpha1.AccountInfo
+
+	user := fmt.Sprintf("user:%s", sar.Spec.User)
+
+	// request to orgs workspace
+	if a.orgWorkspaceID == clusterName {
+		relation = fmt.Sprintf("%s_%s_%s", sar.Spec.ResourceAttributes.Verb, group, sar.Spec.ResourceAttributes.Resource)
+		object := rootOrgName
+
+		allowed, err := a.checkPermissions(r.Context(), relation, object, user, a.orgStoreID, nil)
+		if err != nil {
+			log.Error().Err(err).Str("storeId", a.orgStoreID).Str("object", object).Str("relation", relation).Str("user", user).Msg("unable to call upstream openfga")
+			noOpinion(w, sar)
+			return
+		}
+		log.Info().Str("allowed", fmt.Sprintf("%t", allowed)).Str("user", user).Str("object", object).Str("relation", relation).Msg("sar response")
+
+		if !allowed {
+			noOpinion(w, sar)
+			return
+		}
+
+		writeResponse(w, sar, allowed)
+		return
+	} else {
+		// For resource attributes, we need to get the store ID
+		accountInfo, err = a.getAccountInfo(r.Context(), sar)
+		if err != nil {
+			log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info")
+			noOpinion(w, sar)
+			return
+		}
+	}
 
 	var namespaced bool
 	var gvk schema.GroupVersionKind
@@ -246,44 +272,20 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// request to orgs workspace
-	if a.orgWorkspaceID == clusterName {
-		object = rootOrgName
-	}
-
-	preReq := time.Now()
-	res, err := a.fga.Check(r.Context(), &openfgav1.CheckRequest{
-		StoreId: accountInfo.Spec.FGA.Store.Id,
-		TupleKey: &openfgav1.CheckRequestTupleKey{
-			Object:   object,
-			Relation: relation,
-			User:     fmt.Sprintf("user:%s", sar.Spec.User),
-		},
-		ContextualTuples: &openfgav1.ContextualTupleKeys{
-			TupleKeys: contextualTuples,
-		},
-	})
-
-	openfgaLatency.Observe(time.Since(preReq).Seconds())
+	allowed, err := a.checkPermissions(r.Context(), relation, object, user, accountInfo.Spec.FGA.Store.Id, contextualTuples)
 	if err != nil {
-		log.Error().Err(err).Str("storeId", accountInfo.Spec.FGA.Store.Id).Str("object", object).Str("relation", relation).Str("user", sar.Spec.User).Msg("unable to call upstream openfga")
+		log.Error().Err(err).Str("storeId", a.orgStoreID).Str("object", object).Str("relation", relation).Str("user", user).Msg("unable to call upstream openfga")
 		noOpinion(w, sar)
 		return
 	}
-	log.Info().Str("allowed", fmt.Sprintf("%t", res.Allowed)).Str("user", sar.Spec.User).Str("object", object).Str("relation", relation).Msg("sar response")
-	if !res.Allowed {
+	log.Info().Str("allowed", fmt.Sprintf("%t", allowed)).Str("user", user).Str("object", object).Str("relation", relation).Msg("sar response")
+
+	if !allowed {
 		noOpinion(w, sar)
 		return
 	}
 
-	sar.Status = authorizationv1.SubjectAccessReviewStatus{
-		Allowed: res.Allowed,
-		Denied:  !res.Allowed,
-	}
-
-	if err := json.NewEncoder(w).Encode(&sar); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	writeResponse(w, sar, allowed)
 }
 
 func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
@@ -291,6 +293,37 @@ func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
 		Allowed: false,
 		Reason:  "NoOpinion",
 	}
+	if err := json.NewEncoder(w).Encode(&sar); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (a *AuthorizationHandler) checkPermissions(ctx context.Context, relation, object, user, storeID string, contextualTuples []*openfgav1.TupleKey) (bool, error) {
+	preReq := time.Now()
+	res, err := a.fga.Check(ctx, &openfgav1.CheckRequest{
+		StoreId: storeID,
+		TupleKey: &openfgav1.CheckRequestTupleKey{
+			Object:   rootOrgName,
+			Relation: relation,
+			User:     user,
+		},
+		ContextualTuples: &openfgav1.ContextualTupleKeys{
+			TupleKeys: contextualTuples,
+		},
+	})
+	openfgaLatency.Observe(time.Since(preReq).Seconds())
+	if err != nil {
+		return false, err
+	}
+	return res.Allowed, nil
+}
+
+func writeResponse(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview, allowed bool) {
+	sar.Status = authorizationv1.SubjectAccessReviewStatus{
+		Allowed: allowed,
+		Denied:  !allowed,
+	}
+
 	if err := json.NewEncoder(w).Encode(&sar); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
