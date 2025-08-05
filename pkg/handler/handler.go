@@ -144,7 +144,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			clusterName = clusterNames[0]
 		}
 	}
-	
+
 	log = log.ChildLogger("clusterName", clusterName)
 
 	group := util.CapGroupToRelationLength(sar, 50)
@@ -158,12 +158,13 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		relation = fmt.Sprintf("%s_%s_%s", sar.Spec.ResourceAttributes.Verb, group, sar.Spec.ResourceAttributes.Resource)
 		object := rootOrgName
 
-		allowed, err := a.checkPermissions(r.Context(), relation, object, user, a.orgStoreID, nil)
+		allowed, err := a.checkPermissions(r.Context(), object, relation, user, a.orgStoreID, nil)
 		if err != nil {
 			log.Error().Err(err).Str("storeId", a.orgStoreID).Str("object", object).Str("relation", relation).Str("user", user).Msg("unable to call upstream openfga")
 			noOpinion(w, sar)
 			return
 		}
+
 		log.Info().Str("allowed", fmt.Sprintf("%t", allowed)).Str("user", user).Str("object", object).Str("relation", relation).Msg("sar response")
 
 		if !allowed {
@@ -275,7 +276,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	allowed, err := a.checkPermissions(r.Context(), relation, object, user, accountInfo.Spec.FGA.Store.Id, contextualTuples)
+	allowed, err := a.checkPermissions(r.Context(), object, relation, user, accountInfo.Spec.FGA.Store.Id, contextualTuples)
 	if err != nil {
 		log.Error().Err(err).Str("storeId", a.orgStoreID).Str("object", object).Str("relation", relation).Str("user", user).Msg("unable to call upstream openfga")
 		noOpinion(w, sar)
@@ -291,13 +292,13 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	writeResponse(w, sar, allowed)
 }
 
-func (a *AuthorizationHandler) checkPermissions(ctx context.Context, relation, object, user, storeID string, contextualTuples []*openfgav1.TupleKey) (bool, error) {
+func (a *AuthorizationHandler) checkPermissions(ctx context.Context, object, relation, user, storeID string, contextualTuples []*openfgav1.TupleKey) (bool, error) {
 	preReq := time.Now()
 
 	checkReq := &openfgav1.CheckRequest{
 		StoreId: storeID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
-			Object:   rootOrgName,
+			Object:   object,
 			Relation: relation,
 			User:     user,
 		},
