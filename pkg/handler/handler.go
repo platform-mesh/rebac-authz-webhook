@@ -61,10 +61,12 @@ var ErrNoStoreID = errors.New("no store ID found")
 func (a *AuthorizationHandler) getAccountInfo(ctx context.Context, sar authorizationv1.SubjectAccessReview) (*corev1alpha1.AccountInfo, error) {
 	log := logger.LoadLoggerFromContext(ctx)
 	info := &corev1alpha1.AccountInfo{}
+
 	clusterNameAttr, ok := sar.Spec.Extra["authorization.kubernetes.io/cluster-name"]
 	if !ok || len(clusterNameAttr) == 0 {
 		return nil, errors.New("no cluster name found in the request")
 	}
+
 	log.Debug().Str("cluster", clusterNameAttr[0]).Str("accountInfoName", a.accountInfoName).Msg("Looking for AccountInfo")
 
 	cluster, err := a.mgr.GetCluster(ctx, clusterNameAttr[0])
@@ -82,6 +84,7 @@ func (a *AuthorizationHandler) getAccountInfo(ctx context.Context, sar authoriza
 		log.Error().Msg("AccountInfo found but Store.Id is empty")
 		return nil, ErrNoStoreID
 	}
+
 	log.Debug().Str("storeId", info.Spec.FGA.Store.Id).Msg("Retrieved Store ID")
 
 	return info, nil
@@ -97,6 +100,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	err = r.Body.Close()
 	if err != nil {
 		log.Error().Err(err).Msg("unable to close the request body")
@@ -140,13 +144,12 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			clusterName = clusterNames[0]
 		}
 	}
+	
 	log = log.ChildLogger("clusterName", clusterName)
 
 	group := util.CapGroupToRelationLength(sar, 50)
 	group = strings.ReplaceAll(group, ".", "_")
 	relation := sar.Spec.ResourceAttributes.Verb
-
-	var accountInfo *corev1alpha1.AccountInfo
 
 	user := fmt.Sprintf("user:%s", sar.Spec.User)
 
@@ -170,14 +173,14 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 		writeResponse(w, sar, allowed)
 		return
-	} else {
-		// For resource attributes, we need to get the store ID
-		accountInfo, err = a.getAccountInfo(r.Context(), sar)
-		if err != nil {
-			log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info")
-			noOpinion(w, sar)
-			return
-		}
+	}
+
+	// For resource attributes, we need to get the store ID
+	accountInfo, err := a.getAccountInfo(r.Context(), sar)
+	if err != nil {
+		log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info")
+		noOpinion(w, sar)
+		return
 	}
 
 	var namespaced bool
@@ -288,6 +291,32 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	writeResponse(w, sar, allowed)
 }
 
+func (a *AuthorizationHandler) checkPermissions(ctx context.Context, relation, object, user, storeID string, contextualTuples []*openfgav1.TupleKey) (bool, error) {
+	preReq := time.Now()
+
+	checkReq := &openfgav1.CheckRequest{
+		StoreId: storeID,
+		TupleKey: &openfgav1.CheckRequestTupleKey{
+			Object:   rootOrgName,
+			Relation: relation,
+			User:     user,
+		},
+	}
+
+	if contextualTuples != nil {
+		checkReq.ContextualTuples = &openfgav1.ContextualTupleKeys{
+			TupleKeys: contextualTuples,
+		}
+	}
+
+	res, err := a.fga.Check(ctx, checkReq)
+	openfgaLatency.Observe(time.Since(preReq).Seconds())
+	if err != nil {
+		return false, err
+	}
+	return res.Allowed, nil
+}
+
 func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
 	sar.Status = authorizationv1.SubjectAccessReviewStatus{
 		Allowed: false,
@@ -296,26 +325,6 @@ func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
 	if err := json.NewEncoder(w).Encode(&sar); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func (a *AuthorizationHandler) checkPermissions(ctx context.Context, relation, object, user, storeID string, contextualTuples []*openfgav1.TupleKey) (bool, error) {
-	preReq := time.Now()
-	res, err := a.fga.Check(ctx, &openfgav1.CheckRequest{
-		StoreId: storeID,
-		TupleKey: &openfgav1.CheckRequestTupleKey{
-			Object:   rootOrgName,
-			Relation: relation,
-			User:     user,
-		},
-		ContextualTuples: &openfgav1.ContextualTupleKeys{
-			TupleKeys: contextualTuples,
-		},
-	})
-	openfgaLatency.Observe(time.Since(preReq).Seconds())
-	if err != nil {
-		return false, err
-	}
-	return res.Allowed, nil
 }
 
 func writeResponse(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview, allowed bool) {

@@ -3,7 +3,7 @@ FROM golang:1.24 AS builder
 ENV GOSUMDB=off
 
 RUN git config --global credential.helper store
-RUN --mount=type=secret,id=org_token echo "https://aaronschweig:$(cat /run/secrets/org_token)@github.com" > /root/.git-credentials
+RUN --mount=type=secret,id=org_token echo "https://gha:$(cat /run/secrets/org_token)@github.com" > /root/.git-credentials
 
 WORKDIR /app
 
