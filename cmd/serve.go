@@ -193,6 +193,9 @@ func getOrgWorkspaceID(ctx context.Context, serviceCfg config.Config) (string, e
 
 	kubeconfigPath := serviceCfg.Kcp.KubeconfigPath
 	kcpCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to build config from kubeconfig: %w", err)
+	}
 
 	parsed, err := url.Parse(kcpCfg.Host)
 	if err != nil {
