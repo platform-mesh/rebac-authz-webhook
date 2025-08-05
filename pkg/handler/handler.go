@@ -147,6 +147,13 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	log = log.ChildLogger("clusterName", clusterName)
 
+	restMapper, ok := a.mps.GetMapper(logicalcluster.Name(clusterName))
+	if !ok {
+		log.Error().Err(err).Msg("error getting provider")
+		noOpinion(w, sar)
+		return
+	}
+
 	group := util.CapGroupToRelationLength(sar, 50)
 	group = strings.ReplaceAll(group, ".", "_")
 	relation := sar.Spec.ResourceAttributes.Verb
@@ -186,13 +193,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	var namespaced bool
 	var gvk schema.GroupVersionKind
-
-	restMapper, ok := a.mps.GetMapper(logicalcluster.Name(clusterName))
-	if !ok {
-		log.Error().Err(err).Msg("error getting provider")
-		noOpinion(w, sar)
-		return
-	}
 
 	gvr := schema.GroupVersionResource{
 		Group:    sar.Spec.ResourceAttributes.Group,

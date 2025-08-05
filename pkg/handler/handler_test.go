@@ -24,6 +24,7 @@ import (
 
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/mapperprovider"
 )
 
 // SimpleMockManager implements a basic manager interface for testing
@@ -142,7 +143,9 @@ func TestInvalidStoreOperations(t *testing.T) {
 			assert.NoError(t, err)
 
 			mockManager := createSimpleMockManager()
-			handler, err := handler.NewAuthorizationHandler(nil, mockManager, "account", "", "", nil)
+			mps := mapperprovider.New()
+
+			handler, err := handler.NewAuthorizationHandler(nil, mockManager, "account", "", "", mps)
 			assert.NoError(t, err)
 
 			recorder := httptest.NewRecorder()
@@ -208,7 +211,8 @@ func TestAuthorizationHandlerWithFGA(t *testing.T) {
 			}
 
 			mockManager := createSimpleMockManager()
-			handler, err := handler.NewAuthorizationHandler(mockFGAClient, mockManager, "account", "", "", nil)
+			mps := mapperprovider.New()
+			handler, err := handler.NewAuthorizationHandler(mockFGAClient, mockManager, "account", "", "", mps)
 			assert.NoError(t, err)
 
 			recorder := httptest.NewRecorder()
@@ -319,7 +323,8 @@ func TestNonResourceAttributes(t *testing.T) {
 		assert.NoError(t, err)
 
 		mockManager := createSimpleMockManager()
-		handler, err := handler.NewAuthorizationHandler(nil, mockManager, "account", "", "", nil)
+		mps := mapperprovider.New()
+		handler, err := handler.NewAuthorizationHandler(nil, mockManager, "account", "", "", mps)
 		assert.NoError(t, err)
 
 		recorder := httptest.NewRecorder()
@@ -363,7 +368,8 @@ func TestMultiClusterFunctionality(t *testing.T) {
 		assert.NoError(t, err)
 
 		mockManager := createSimpleMockManager()
-		handler, err := handler.NewAuthorizationHandler(nil, mockManager, "account", "", "", nil)
+		mps := mapperprovider.New()
+		handler, err := handler.NewAuthorizationHandler(nil, mockManager, "account", "", "", mps)
 		assert.NoError(t, err)
 
 		recorder := httptest.NewRecorder()
@@ -406,7 +412,8 @@ func TestMultiClusterFunctionality(t *testing.T) {
 		// Don't set up any expectations - this will test error handling
 
 		mockManager := createSimpleMockManager()
-		handler, err := handler.NewAuthorizationHandler(mockFGAClient, mockManager, "account", "", "", nil)
+		mps := mapperprovider.New()
+		handler, err := handler.NewAuthorizationHandler(mockFGAClient, mockManager, "account", "", "", mps)
 		assert.NoError(t, err)
 
 		recorder := httptest.NewRecorder()
