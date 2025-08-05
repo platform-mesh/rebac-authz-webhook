@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kcp-dev/logicalcluster/v3"
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	corev1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/platform-mesh/golang-commons/logger"
 
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/mapperprovider"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
 )
 
@@ -27,6 +29,7 @@ type AuthorizationHandler struct {
 	fga             openfgav1.OpenFGAServiceClient
 	accountInfoName string
 	mgr             mcmanager.Manager
+	mps             *mapperprovider.MapperProviders
 }
 
 var (
@@ -37,12 +40,13 @@ var (
 	})
 )
 
-func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string) (*AuthorizationHandler, error) {
+func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string, mps *mapperprovider.MapperProviders) (*AuthorizationHandler, error) {
 
 	return &AuthorizationHandler{
 		fga:             fga,
 		accountInfoName: accountInfoName,
 		mgr:             mgr,
+		mps:             mps,
 	}, nil
 }
 
@@ -116,6 +120,12 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	log = log.ChildLogger("resourceAttributes", sar.Spec.ResourceAttributes.String()).
+		ChildLogger("group", sar.Spec.ResourceAttributes.Group).
+		ChildLogger("resource", sar.Spec.ResourceAttributes.Resource).
+		ChildLogger("subresource", sar.Spec.ResourceAttributes.Subresource).
+		ChildLogger("verb", sar.Spec.ResourceAttributes.Verb)
+
 	log.Debug().Str("sar", fmt.Sprintf("%+v", sar)).Msg("Received SubjectAccessReview")
 
 	// For resource attributes, we need to get the store ID
@@ -125,12 +135,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		noOpinion(w, sar)
 		return
 	}
-
-	log = log.ChildLogger("resourceAttributes", sar.Spec.ResourceAttributes.String()).
-		ChildLogger("group", sar.Spec.ResourceAttributes.Group).
-		ChildLogger("resource", sar.Spec.ResourceAttributes.Resource).
-		ChildLogger("subresource", sar.Spec.ResourceAttributes.Subresource).
-		ChildLogger("verb", sar.Spec.ResourceAttributes.Verb)
 
 	group := util.CapGroupToRelationLength(sar, 50)
 	group = strings.ReplaceAll(group, ".", "_")
@@ -142,34 +146,30 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			clusterName = clusterNames[0]
 		}
 	}
+	log = log.ChildLogger("clusterName", clusterName)
 
 	var namespaced bool
 	var gvk schema.GroupVersionKind
 
-	cluster, err := a.mgr.GetCluster(r.Context(), clusterName)
-	if err != nil {
-		log.Error().Err(err).Str("cluster", clusterName).Msg("error getting cluster")
-		noOpinion(w, sar)
-		return
-	}
-
-	restMapper := cluster.GetRESTMapper()
-	if err != nil {
+	restMapper, ok := a.mps.GetMapper(logicalcluster.Name(clusterName))
+	if !ok {
 		log.Error().Err(err).Msg("error getting provider")
 		noOpinion(w, sar)
 		return
 	}
 
-	gvk, err = restMapper.KindFor(schema.GroupVersionResource{
+	gvr := schema.GroupVersionResource{
 		Group:    sar.Spec.ResourceAttributes.Group,
 		Resource: sar.Spec.ResourceAttributes.Resource,
 		Version:  sar.Spec.ResourceAttributes.Version,
-	})
+	}
+	gvk, err = restMapper.KindFor(gvr)
 	if err != nil {
-		log.Error().Err(err).Msg("error getting GVK")
+		log.Error().Err(err).Str("gvr", fmt.Sprintf("%+v", gvr)).Msg("error getting GVK")
 		noOpinion(w, sar)
 		return
 	}
+	log.Debug().Str("gvr", fmt.Sprintf("%+v", gvr)).Str("gvk", fmt.Sprintf("%+v", gvk)).Msg("Got GVK")
 
 	namespaced, err = apiutil.IsGVKNamespaced(gvk, restMapper)
 	if err != nil {
@@ -178,7 +178,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	groupForType := strings.ReplaceAll(sar.Spec.ResourceAttributes.Group, ".", "_")
 	resourceType := sar.Spec.ResourceAttributes.Resource
 
 	if singularResource, err := restMapper.ResourceSingularizer(sar.Spec.ResourceAttributes.Resource); err == nil {
@@ -186,7 +185,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		log.Debug().Str("resource", sar.Spec.ResourceAttributes.Resource).Str("singular", resourceType).Msg("Converted resource to singular form")
 	}
 
-	objectType := fmt.Sprintf("%s_%s", groupForType, resourceType)
+	objectType := fmt.Sprintf("%s_%s", group, resourceType)
 
 	longestObjectType := fmt.Sprintf("create_%ss", objectType)
 	if len(longestObjectType) > 50 {
@@ -233,7 +232,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	log.Debug().Str("object", object).Str("relation", relation).Any("contextualTuples", contextualTuples).Msg("ruleless mode, using contextual tuples")
+	log.Debug().Str("object", object).Str("relation", relation).Any("contextualTuples", contextualTuples).Msg("check call elements")
 
 	if a.fga == nil {
 		log.Warn().Msg("FGA client is nil, returning no opinion")
@@ -260,7 +259,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		noOpinion(w, sar)
 		return
 	}
-	log.Info().Bool("allowed", res.Allowed).Str("user", sar.Spec.User).Str("object", object).Str("relation", relation).Msg("sar response")
+	log.Info().Str("allowed", fmt.Sprintf("%t", res.Allowed)).Str("user", sar.Spec.User).Str("object", object).Str("relation", relation).Msg("sar response")
 	if !res.Allowed {
 		noOpinion(w, sar)
 		return
