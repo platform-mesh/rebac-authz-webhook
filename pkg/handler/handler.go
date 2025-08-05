@@ -27,6 +27,8 @@ import (
 type AuthorizationHandler struct {
 	fga             openfgav1.OpenFGAServiceClient
 	accountInfoName string
+	orgStoreID      string
+	orgWorkspaceID  string
 	mgr             mcmanager.Manager
 }
 
@@ -40,12 +42,14 @@ var (
 
 const rootOrgName = "tenancy_kcp_io_workspace:orgs"
 
-func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string) (*AuthorizationHandler, error) {
+func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string, orgStoreID, orgWorkspaceID string) (*AuthorizationHandler, error) {
 
 	return &AuthorizationHandler{
 		fga:             fga,
 		accountInfoName: accountInfoName,
 		mgr:             mgr,
+		orgStoreID:      orgStoreID,
+		orgWorkspaceID:  orgWorkspaceID,
 	}, nil
 }
 
@@ -118,7 +122,6 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 		return
 	}
-
 	// For resource attributes, we need to get the store ID
 	accountInfo, err := a.getAccountInfo(r.Context(), sar)
 	if err != nil {
@@ -242,9 +245,8 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// if we manage to understand that the request is in org scope by extracting kcp workspace
-	// this logic will be replaced by workspace path determination way
-	if isAccountCreationRequest(sar) {
+	// request to orgs workspace
+	if a.orgWorkspaceID == clusterName{
 		object = rootOrgName
 	}
 
@@ -291,25 +293,4 @@ func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
 	if err := json.NewEncoder(w).Encode(&sar); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func isAccountCreationRequest(sar authorizationv1.SubjectAccessReview) bool {
-	return sar.Spec.ResourceAttributes != nil &&
-		sar.Spec.ResourceAttributes.Group == "core.platform-mesh.io" &&
-		sar.Spec.ResourceAttributes.Resource == "accounts" &&
-		sar.Spec.ResourceAttributes.Verb == "create"
-}
-
-func (a *AuthorizationHandler) getStoreId(storeName string) (string, error) {
-	stores, err := a.fga.ListStores(context.TODO(), &openfgav1.ListStoresRequest{})
-	if err != nil {
-		return "", err
-	}
-
-	for _, store := range stores.Stores {
-		if store.Name == storeName {
-			return store.Id, nil
-		}
-	}
-	return "", fmt.Errorf("store %s doesn't exist", storeName)
 }
