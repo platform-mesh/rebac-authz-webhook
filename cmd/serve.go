@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
 
 	kcpcorev1alpha1 "github.com/kcp-dev/kcp/sdk/apis/core/v1alpha1"
 	"github.com/kcp-dev/multicluster-provider/apiexport"
@@ -77,7 +79,7 @@ func serve() { // coverage-ignore
 	srv := mgr.GetWebhookServer()
 	cmw := &ContextMiddleware{Logger: log}
 
-	orgsWorkspaceID, err := getOrgWorkspaceID(ctx, restCfg)
+	orgsWorkspaceID, err := getOrgWorkspaceID(ctx, serverCfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot get organization's workspace ID")
 	}
@@ -187,15 +189,31 @@ func (c *ContextMiddleware) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func getOrgWorkspaceID(ctx context.Context, restCfg *rest.Config) (string, error) {
-	kcpClientSet, err := kcpclient.NewForConfig(restCfg)
+func getOrgWorkspaceID(ctx context.Context, serviceCfg config.Config) (string, error) {
+
+	kubeconfigPath := serviceCfg.Kcp.KubeconfigPath
+	kcpCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+
+	parsed, err := url.Parse(kcpCfg.Host)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse host URL: %w", err)
+	}
+
+	parsed.Path = path.Join("clusters", "root")
+
+	wsCfg := rest.CopyConfig(kcpCfg)
+	wsCfg.Host = parsed.String()
+
+	kcpClientSet, err := kcpclient.NewForConfig(wsCfg)
 	if err != nil {
 		return "", err
 	}
+
 	orgWorkspace, err := kcpClientSet.TenancyV1alpha1().Workspaces().Get(ctx, "orgs", metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
+
 	return orgWorkspace.Spec.Cluster, nil
 }
 
