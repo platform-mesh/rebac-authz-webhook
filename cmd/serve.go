@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
+	"net/url"
+	"path"
 
 	kcpcorev1alpha1 "github.com/kcp-dev/kcp/sdk/apis/core/v1alpha1"
 	"github.com/kcp-dev/multicluster-provider/apiexport"
@@ -25,10 +28,15 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 
+	tenancyv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/tenancy/v1alpha1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/client"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler"
+
+	kcpclient "github.com/kcp-dev/kcp/pkg/client/clientset/versioned"
+	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/mapperprovider"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -66,11 +74,22 @@ func serve() { // coverage-ignore
 	kcpScheme := runtime.NewScheme()
 	utilruntime.Must(kcpcorev1alpha1.AddToScheme(kcpScheme))
 	utilruntime.Must(accountsv1alpha1.AddToScheme(kcpScheme))
+	utilruntime.Must(tenancyv1alpha1.AddToScheme(kcpScheme))
 
 	srv := mgr.GetWebhookServer()
 	cmw := &ContextMiddleware{Logger: log}
 
-	authHandler, err := handler.NewAuthorizationHandler(fga, mgr, serverCfg.Kcp.AccountInfoName, mps)
+	orgsWorkspaceID, err := getOrgWorkspaceID(ctx, serverCfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("cannot get organization's workspace ID")
+	}
+
+	orgsStoreID, err := getOrgStoreID(ctx, fga, "orgs")
+	if err != nil {
+		log.Fatal().Err(err).Msg("cannot get organization's store ID")
+	}
+
+	authHandler, err := handler.NewAuthorizationHandler(fga, mgr, serverCfg.Kcp.AccountInfoName, orgsStoreID, orgsWorkspaceID, mps)
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not create authorization handler")
 	}
@@ -168,4 +187,49 @@ func (c *ContextMiddleware) Middleware(next http.Handler) http.Handler {
 		ctx := logger.SetLoggerInContext(r.Context(), c.Logger)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func getOrgWorkspaceID(ctx context.Context, serviceCfg config.Config) (string, error) {
+
+	kubeconfigPath := serviceCfg.Kcp.KubeconfigPath
+	kcpCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to build config from kubeconfig: %w", err)
+	}
+
+	parsed, err := url.Parse(kcpCfg.Host)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse host URL: %w", err)
+	}
+
+	parsed.Path = path.Join("clusters", "root")
+
+	wsCfg := rest.CopyConfig(kcpCfg)
+	wsCfg.Host = parsed.String()
+
+	kcpClientSet, err := kcpclient.NewForConfig(wsCfg)
+	if err != nil {
+		return "", err
+	}
+
+	orgWorkspace, err := kcpClientSet.TenancyV1alpha1().Workspaces().Get(ctx, "orgs", metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	return orgWorkspace.Spec.Cluster, nil
+}
+
+func getOrgStoreID(ctx context.Context, fga openfgav1.OpenFGAServiceClient, storeName string) (string, error) {
+	stores, err := fga.ListStores(ctx, &openfgav1.ListStoresRequest{})
+	if err != nil {
+		return "", err
+	}
+
+	for _, store := range stores.Stores {
+		if store.Name == storeName {
+			return store.Id, nil
+		}
+	}
+	return "", fmt.Errorf("store %s doesn't exist", storeName)
 }

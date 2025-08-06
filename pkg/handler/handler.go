@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
@@ -28,6 +29,8 @@ import (
 type AuthorizationHandler struct {
 	fga             openfgav1.OpenFGAServiceClient
 	accountInfoName string
+	orgStoreID      string
+	orgWorkspaceID  string
 	mgr             mcmanager.Manager
 	mps             *mapperprovider.MapperProviders
 }
@@ -40,12 +43,15 @@ var (
 	})
 )
 
-func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string, mps *mapperprovider.MapperProviders) (*AuthorizationHandler, error) {
+const rootOrgName = "tenancy_kcp_io_workspace:orgs"
 
+func NewAuthorizationHandler(fga openfgav1.OpenFGAServiceClient, mgr mcmanager.Manager, accountInfoName string, orgStoreID, orgWorkspaceID string, mps *mapperprovider.MapperProviders) (*AuthorizationHandler, error) {
 	return &AuthorizationHandler{
 		fga:             fga,
 		accountInfoName: accountInfoName,
 		mgr:             mgr,
+		orgStoreID:      orgStoreID,
+		orgWorkspaceID:  orgWorkspaceID,
 		mps:             mps,
 	}, nil
 }
@@ -55,10 +61,12 @@ var ErrNoStoreID = errors.New("no store ID found")
 func (a *AuthorizationHandler) getAccountInfo(ctx context.Context, sar authorizationv1.SubjectAccessReview) (*corev1alpha1.AccountInfo, error) {
 	log := logger.LoadLoggerFromContext(ctx)
 	info := &corev1alpha1.AccountInfo{}
+
 	clusterNameAttr, ok := sar.Spec.Extra["authorization.kubernetes.io/cluster-name"]
 	if !ok || len(clusterNameAttr) == 0 {
 		return nil, errors.New("no cluster name found in the request")
 	}
+
 	log.Debug().Str("cluster", clusterNameAttr[0]).Str("accountInfoName", a.accountInfoName).Msg("Looking for AccountInfo")
 
 	cluster, err := a.mgr.GetCluster(ctx, clusterNameAttr[0])
@@ -76,6 +84,7 @@ func (a *AuthorizationHandler) getAccountInfo(ctx context.Context, sar authoriza
 		log.Error().Msg("AccountInfo found but Store.Id is empty")
 		return nil, ErrNoStoreID
 	}
+
 	log.Debug().Str("storeId", info.Spec.FGA.Store.Id).Msg("Retrieved Store ID")
 
 	return info, nil
@@ -91,6 +100,7 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	err = r.Body.Close()
 	if err != nil {
 		log.Error().Err(err).Msg("unable to close the request body")
@@ -128,10 +138,18 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	log.Debug().Str("sar", fmt.Sprintf("%+v", sar)).Msg("Received SubjectAccessReview")
 
-	// For resource attributes, we need to get the store ID
-	accountInfo, err := a.getAccountInfo(r.Context(), sar)
-	if err != nil {
-		log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info, responding with no opinion")
+	var clusterName string
+	if sar.Spec.Extra != nil {
+		if clusterNames, exists := sar.Spec.Extra["authorization.kubernetes.io/cluster-name"]; exists && len(clusterNames) > 0 {
+			clusterName = clusterNames[0]
+		}
+	}
+
+	log = log.ChildLogger("clusterName", clusterName)
+
+	restMapper, ok := a.mps.GetMapper(logicalcluster.Name(clusterName))
+	if !ok {
+		log.Error().Err(err).Msg("error getting provider")
 		noOpinion(w, sar)
 		return
 	}
@@ -140,23 +158,41 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	group = strings.ReplaceAll(group, ".", "_")
 	relation := sar.Spec.ResourceAttributes.Verb
 
-	var clusterName string
-	if sar.Spec.Extra != nil {
-		if clusterNames, exists := sar.Spec.Extra["authorization.kubernetes.io/cluster-name"]; exists && len(clusterNames) > 0 {
-			clusterName = clusterNames[0]
+	user := fmt.Sprintf("user:%s", sar.Spec.User)
+
+	// request to orgs workspace
+	if a.orgWorkspaceID == clusterName {
+		relation = fmt.Sprintf("%s_%s_%s", sar.Spec.ResourceAttributes.Verb, group, sar.Spec.ResourceAttributes.Resource)
+		object := rootOrgName
+
+		allowed, err := a.checkPermissions(r.Context(), object, relation, user, a.orgStoreID, nil)
+		if err != nil {
+			log.Error().Err(err).Str("storeId", a.orgStoreID).Str("object", object).Str("relation", relation).Str("user", user).Msg("unable to call upstream openfga")
+			noOpinion(w, sar)
+			return
 		}
+
+		log.Info().Str("allowed", fmt.Sprintf("%t", allowed)).Str("user", user).Str("object", object).Str("relation", relation).Msg("sar response")
+
+		if !allowed {
+			noOpinion(w, sar)
+			return
+		}
+
+		writeResponse(w, sar, allowed)
+		return
 	}
-	log = log.ChildLogger("clusterName", clusterName)
 
-	var namespaced bool
-	var gvk schema.GroupVersionKind
-
-	restMapper, ok := a.mps.GetMapper(logicalcluster.Name(clusterName))
-	if !ok {
-		log.Error().Err(err).Msg("error getting provider")
+	// For resource attributes, we need to get the store ID
+	accountInfo, err := a.getAccountInfo(r.Context(), sar)
+	if err != nil {
+		log.Error().Err(err).Str("user", sar.Spec.User).Msg("error getting store ID from account info")
 		noOpinion(w, sar)
 		return
 	}
+
+	var namespaced bool
+	var gvk schema.GroupVersionKind
 
 	gvr := schema.GroupVersionResource{
 		Group:    sar.Spec.ResourceAttributes.Group,
@@ -240,39 +276,46 @@ func (a *AuthorizationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	allowed, err := a.checkPermissions(r.Context(), object, relation, user, accountInfo.Spec.FGA.Store.Id, contextualTuples)
+	if err != nil {
+		log.Error().Err(err).Str("storeId", a.orgStoreID).Str("object", object).Str("relation", relation).Str("user", user).Msg("unable to call upstream openfga")
+		noOpinion(w, sar)
+		return
+	}
+	log.Info().Str("allowed", fmt.Sprintf("%t", allowed)).Str("user", user).Str("object", object).Str("relation", relation).Msg("sar response")
+
+	if !allowed {
+		noOpinion(w, sar)
+		return
+	}
+
+	writeResponse(w, sar, allowed)
+}
+
+func (a *AuthorizationHandler) checkPermissions(ctx context.Context, object, relation, user, storeID string, contextualTuples []*openfgav1.TupleKey) (bool, error) {
 	preReq := time.Now()
-	res, err := a.fga.Check(r.Context(), &openfgav1.CheckRequest{
-		StoreId: accountInfo.Spec.FGA.Store.Id,
+
+	checkReq := &openfgav1.CheckRequest{
+		StoreId: storeID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
 			Object:   object,
 			Relation: relation,
-			User:     fmt.Sprintf("user:%s", sar.Spec.User),
+			User:     user,
 		},
-		ContextualTuples: &openfgav1.ContextualTupleKeys{
-			TupleKeys: contextualTuples,
-		},
-	})
+	}
 
+	if contextualTuples != nil {
+		checkReq.ContextualTuples = &openfgav1.ContextualTupleKeys{
+			TupleKeys: contextualTuples,
+		}
+	}
+
+	res, err := a.fga.Check(ctx, checkReq)
 	openfgaLatency.Observe(time.Since(preReq).Seconds())
 	if err != nil {
-		log.Error().Err(err).Str("storeId", accountInfo.Spec.FGA.Store.Id).Str("object", object).Str("relation", relation).Str("user", sar.Spec.User).Msg("unable to call upstream openfga")
-		noOpinion(w, sar)
-		return
+		return false, err
 	}
-	log.Info().Str("allowed", fmt.Sprintf("%t", res.Allowed)).Str("user", sar.Spec.User).Str("object", object).Str("relation", relation).Msg("sar response")
-	if !res.Allowed {
-		noOpinion(w, sar)
-		return
-	}
-
-	sar.Status = authorizationv1.SubjectAccessReviewStatus{
-		Allowed: res.Allowed,
-		Denied:  !res.Allowed,
-	}
-
-	if err := json.NewEncoder(w).Encode(&sar); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	return res.Allowed, nil
 }
 
 func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
@@ -280,6 +323,17 @@ func noOpinion(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview) {
 		Allowed: false,
 		Reason:  "NoOpinion",
 	}
+	if err := json.NewEncoder(w).Encode(&sar); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func writeResponse(w http.ResponseWriter, sar authorizationv1.SubjectAccessReview, allowed bool) {
+	sar.Status = authorizationv1.SubjectAccessReviewStatus{
+		Allowed: allowed,
+		Denied:  !allowed,
+	}
+
 	if err := json.NewEncoder(w).Encode(&sar); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
