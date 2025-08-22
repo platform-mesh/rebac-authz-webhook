@@ -1,3 +1,6 @@
+> [!WARNING]
+> This Repository is under development and not ready for productive use. It is in an alpha stage. That means APIs and concepts may change on short notice including breaking changes or complete removal of apis.
+
 # Platform Mesh - rebac-authz-webhook
 ![Build Status](https://github.com/platform-mesh/rebac-authz-webhook/actions/workflows/pipeline.yml/badge.svg)
 
