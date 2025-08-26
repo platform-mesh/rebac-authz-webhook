@@ -96,8 +96,8 @@ github.com/kcp-dev/kcp/pkg/apis v0.11.0 h1:K6p+tNHNcvfACCPLcHgY0EMLeaIwR1jS491Fy
 github.com/kcp-dev/kcp/pkg/apis v0.11.0/go.mod h1:8cUAmfMJcksauz53UtsLYG8Phhx62rvuCnd/5t/Zihk=
 github.com/kcp-dev/kcp/pkg/client v0.0.0-20230328080949-0f3bb69fdc08 h1:0blsXyXkTOvlNDk0w76LjQ2TsE3GWhfhS2gnDnj0Ic8=
 github.com/kcp-dev/kcp/pkg/client v0.0.0-20230328080949-0f3bb69fdc08/go.mod h1:RbjVziId9vruNj7tvsM+awj8kmO3EfV//xkYCDX8mPY=
-github.com/kcp-dev/kcp/sdk v0.28.0 h1:AOgGrgpqhrplbXMSbcvjFwCqwg4UlysTwIFZ0LvFxlk=
-github.com/kcp-dev/kcp/sdk v0.28.0/go.mod h1:8oZpWxkoMu2TDpx5DgdIGDigByKHKkeqVMA4GiWneoI=
+github.com/kcp-dev/kcp/sdk v0.28.1 h1:bTtuHVjFRjbwFEqXTPxc1J1JP2Hc3mTYqQ2xfJsi16M=
+github.com/kcp-dev/kcp/sdk v0.28.1/go.mod h1:8oZpWxkoMu2TDpx5DgdIGDigByKHKkeqVMA4GiWneoI=
 github.com/kcp-dev/logicalcluster/v3 v3.0.5 h1:JbYakokb+5Uinz09oTXomSUJVQsqfxEvU4RyHUYxHOU=
 github.com/kcp-dev/logicalcluster/v3 v3.0.5/go.mod h1:EWBUBxdr49fUB1cLMO4nOdBWmYifLbP1LfoL20KkXYY=
 github.com/kcp-dev/multicluster-provider v0.1.0 h1:LS4z4d6AbsYg7Lj9Hlmkbv1M+ZIyw4laNpSsUgF3tRI=
