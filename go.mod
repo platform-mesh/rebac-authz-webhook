@@ -12,7 +12,7 @@ replace (
 require (
 	github.com/go-logr/logr v1.4.3
 	github.com/kcp-dev/kcp/pkg/client v0.0.0-20230328080949-0f3bb69fdc08
-	github.com/kcp-dev/kcp/sdk v0.28.0
+	github.com/kcp-dev/kcp/sdk v0.28.1
 	github.com/kcp-dev/logicalcluster/v3 v3.0.5
 	github.com/kcp-dev/multicluster-provider v0.1.0
 	github.com/openfga/api/proto v0.0.0-20250814141243-c0b62b28b14d
