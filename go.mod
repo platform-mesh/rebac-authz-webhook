@@ -17,7 +17,7 @@ require (
 	github.com/kcp-dev/multicluster-provider v0.1.0
 	github.com/openfga/api/proto v0.0.0-20250909173124-0ac19aac54f2
 	github.com/platform-mesh/account-operator v0.1.30
-	github.com/platform-mesh/golang-commons v0.1.29
+	github.com/platform-mesh/golang-commons v0.1.31
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
