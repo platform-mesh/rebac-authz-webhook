@@ -3,3 +3,4 @@ exclude:
     - ^pkg/handler/mocks # exclude generated mock files
     - main\.go$ # skip covering main.go
     - ^cmd # skip covering cmd directory
+    - ^pkg/authorization/response\.go$

@@ -33,6 +33,16 @@ type Handler interface {
 	Handle(context.Context, Request) Response
 }
 
+// HandlerFunc implements Handler interface using a single function.
+type HandlerFunc func(context.Context, Request) Response
+
+var _ Handler = HandlerFunc(nil)
+
+// Handle process the TokenReview by invoking the underlying function.
+func (f HandlerFunc) Handle(ctx context.Context, req Request) Response {
+	return f(ctx, req)
+}
+
 // Webhook represents each individual webhook.
 type Webhook struct {
 	// Handler actually processes an authorization request returning whether it was authorized or unauthorized.
@@ -101,7 +111,10 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	req := Request{sar}
 
-	wh.writeResponse(w, wh.Handler.Handle(ctx, req))
+	res := wh.Handler.Handle(ctx, req)
+	res.UID = req.UID
+
+	wh.writeResponse(w, res)
 }
 
 func (wh *Webhook) writeResponse(w io.Writer, resp Response) {
