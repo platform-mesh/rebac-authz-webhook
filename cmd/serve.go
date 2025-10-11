@@ -69,7 +69,7 @@ var serveCmd = &cobra.Command{
 				BindAddress: defaultCfg.Metrics.BindAddress,
 				TLSOpts: []func(*tls.Config){
 					func(c *tls.Config) {
-						log.Info().Msg("disabling http/2")
+						klog.Info("disabling http/2")
 						c.NextProtos = []string{"http/1.1"}
 					},
 				},

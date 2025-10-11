@@ -93,7 +93,10 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body) // TODO: one could size of usnig a os.LimitReader to not parse infinitly large bodies
+	// prevent unbound reads, 1MiB should be enough for a SAR
+	maxReader := http.MaxBytesReader(w, r.Body, 1<<20)
+
+	body, err := io.ReadAll(maxReader)
 	if err != nil {
 		wh.log.Error(err, "unable to read the body from the incoming request")
 		wh.writeResponse(w, Errored(err))

@@ -6,7 +6,6 @@ import (
 	kcpapisv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/apis/v1alpha1"
 	tenancyv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/tenancy/v1alpha1"
 	accountsv1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
-	commonconfig "github.com/platform-mesh/golang-commons/config"
 	pmconfig "github.com/platform-mesh/golang-commons/config"
 	"github.com/platform-mesh/golang-commons/logger"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
@@ -25,7 +24,7 @@ var (
 	}
 
 	v          *viper.Viper
-	defaultCfg *commonconfig.CommonServiceConfig
+	defaultCfg *pmconfig.CommonServiceConfig
 	serverCfg  config.Config
 	log        *logger.Logger
 	scheme     = runtime.NewScheme()

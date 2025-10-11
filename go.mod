@@ -1,6 +1,6 @@
 module github.com/platform-mesh/rebac-authz-webhook
 
-go 1.25.1
+go 1.25
 
 require (
 	github.com/go-logr/logr v1.4.3

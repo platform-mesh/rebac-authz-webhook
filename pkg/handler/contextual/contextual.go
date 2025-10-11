@@ -54,6 +54,11 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	klog.V(5).InfoS("found cluster name", "clusterName", clusterName)
 
+	if req.Spec.ResourceAttributes == nil {
+		klog.V(5).Info("request does not contain ResourceAttributes, skipping")
+		return authorization.NoOpinion()
+	}
+
 	accountInfoCluster, err := c.mgr.GetCluster(ctx, clusterName)
 	if err != nil {
 		klog.ErrorS(err, "failed to get cluster from manager", "clusterName", clusterName)

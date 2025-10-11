@@ -53,6 +53,7 @@ func TestHandler(t *testing.T) {
 						Extra: map[string]v1.ExtraValue{
 							"authorization.kubernetes.io/cluster-name": {"a"},
 						},
+						ResourceAttributes: &v1.ResourceAttributes{},
 					},
 				},
 			},

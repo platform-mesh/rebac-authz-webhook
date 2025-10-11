@@ -49,6 +49,11 @@ func (o *orgsAuthorizer) Handle(ctx context.Context, req authorization.Request) 
 
 	clusterName := cn[0]
 
+	if req.Spec.ResourceAttributes == nil {
+		klog.V(5).Info("request does not contain ResourceAttributes, skipping")
+		return authorization.NoOpinion()
+	}
+
 	if clusterName != o.orgsWorkspaceID {
 		klog.V(5).Infof("request cluster name %q does not match org workspace ID %q, skipping", clusterName, o.orgsWorkspaceID)
 		return authorization.NoOpinion()
