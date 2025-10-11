@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"flag"
+	"os"
 
+	"github.com/go-logr/zerologr"
 	kcpapisv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/apis/v1alpha1"
 	tenancyv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/tenancy/v1alpha1"
 	accountsv1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	pmconfig "github.com/platform-mesh/golang-commons/config"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -15,6 +18,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 )
 
 var (
@@ -29,10 +33,10 @@ var (
 )
 
 func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(accountsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kcpapisv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(tenancyv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(accountsv1alpha1.AddToScheme(scheme))
 
 	rootCmd.AddCommand(serveCmd)
 
@@ -46,6 +50,8 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+	klog.SetLogger(zerologr.New(ptr.To(zerolog.New(os.Stdout))))
 
 	klogFlagSet := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(klogFlagSet)

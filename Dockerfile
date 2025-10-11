@@ -1,18 +1,18 @@
 FROM golang:1.25 AS builder
 
-ENV GOSUMDB=off
-
-RUN git config --global credential.helper store
-RUN --mount=type=secret,id=org_token echo "https://gha:$(cat /run/secrets/org_token)@github.com" > /root/.git-credentials
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
 COPY go.mod go.mod
 COPY go.sum go.sum
 
+RUN go mod download
+
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o rebac-authz-webhook main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o rebac-authz-webhook main.go
 
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /

@@ -23,7 +23,3 @@ nodes:
   extraMounts:
   - hostPath: /Users/I547291/Documents/Development/ams-pro/authz-webook/config
     containerPath: /config
-
-# authentication-token-webhook-config-file: "/config/authn.yaml"
-# authentication-token-webhook-cache-ttl: "1s" # only so low for testing
-# authentication-token-webhook-version: v1
