@@ -6,7 +6,8 @@ type Config struct {
 	} `mapstructure:",squash"`
 
 	Webhook struct {
-		CertDir string `mapstructure:"webhook-cert-dir" default:"config"`
+		CertDir    string `mapstructure:"webhook-cert-dir" default:"config"`
+		ClusterKey string `mapstructure:"webhook-cluster-key" default:"authorization.kubernetes.io/cluster-name"`
 	} `mapstructure:",squash"`
 
 	KCP struct {

@@ -7,7 +7,6 @@ import (
 	tenancyv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/tenancy/v1alpha1"
 	accountsv1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	pmconfig "github.com/platform-mesh/golang-commons/config"
-	"github.com/platform-mesh/golang-commons/logger"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -26,7 +25,6 @@ var (
 	v          *viper.Viper
 	defaultCfg *pmconfig.CommonServiceConfig
 	serverCfg  config.Config
-	log        *logger.Logger
 	scheme     = runtime.NewScheme()
 )
 
@@ -37,7 +35,6 @@ func init() {
 	utilruntime.Must(tenancyv1alpha1.AddToScheme(scheme))
 
 	rootCmd.AddCommand(serveCmd)
-	cobra.OnInitialize(initLog)
 
 	var err error
 	v, defaultCfg, err = pmconfig.NewDefaultConfig(rootCmd)
@@ -57,19 +54,7 @@ func init() {
 	rootCmd.PersistentFlags().AddGoFlagSet(klogFlagSet)
 }
 
-func Execute() { // coverage-ignore
+func Execute() {
 	defer klog.Flush()
 	cobra.CheckErr(rootCmd.Execute())
-}
-
-func initLog() { // coverage-ignore
-	logcfg := logger.DefaultConfig()
-	logcfg.Level = defaultCfg.Log.Level
-	logcfg.NoJSON = defaultCfg.Log.NoJson
-
-	var err error
-	log, err = logger.New(logcfg)
-	if err != nil {
-		panic(err)
-	}
 }

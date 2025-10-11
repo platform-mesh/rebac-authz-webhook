@@ -40,7 +40,7 @@ type HandlerFunc func(context.Context, Request) Response
 
 var _ Handler = HandlerFunc(nil)
 
-// Handle process the TokenReview by invoking the underlying function.
+// Handle processes the SubjectAccessReview by invoking the underlying function.
 func (f HandlerFunc) Handle(ctx context.Context, req Request) Response {
 	return f(ctx, req)
 }
@@ -103,6 +103,10 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Both v1 and v1beta1 SubjectAccessReview types are exactly the same, so the v1beta1 type can
+	// be decoded into the v1 type. However the runtime codec's decoder guesses which type to
+	// decode into by type name if an Object's TypeMeta isn't set. By setting TypeMeta of an
+	// unregistered type to the v1 GVK, the decoder will coerce a v1beta1 SubjectAccessReview to authenticationv1.
 	req := Request{}
 	sar := unversionedSubjectAccessReview{}
 	sar.SubjectAccessReview = &req.SubjectAccessReview

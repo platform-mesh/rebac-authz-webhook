@@ -87,6 +87,7 @@ var serveCmd = &cobra.Command{
 		if err != nil {
 			klog.Exit(err, "cannot create grpc client to OpenFGA")
 		}
+		defer conn.Close() //nolint:errcheck
 
 		fga := openfgav1.NewOpenFGAServiceClient(conn)
 
@@ -95,7 +96,7 @@ var serveCmd = &cobra.Command{
 			klog.Exit(err, "cannot list stores from OpenFGA")
 		}
 		if len(storeRes.Stores) == 0 {
-			klog.Exit(nil, "no stores found in OpenFGA")
+			klog.Exit("no stores found in OpenFGA")
 		}
 		klog.InfoS("using OpenFGA store", "id", storeRes.Stores[0].Id)
 
@@ -119,7 +120,7 @@ var serveCmd = &cobra.Command{
 			klog.Exit(err, "failed to get orgs workspace")
 		}
 
-		extraAttrClusterKey := "authorization.kubernetes.io/cluster-name"
+		extraAttrClusterKey := serverCfg.Webhook.ClusterKey
 
 		mgr.GetWebhookServer().Register("/authz", authorization.New(
 			klog.NewKlogr(),
