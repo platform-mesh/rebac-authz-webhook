@@ -142,7 +142,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		}
 	} else {
 		contextualTuples = append(contextualTuples, &openfgav1.TupleKey{
-			Object:   object,
+			Object:   fmt.Sprintf("%s:%s/%s", objectType, clusterName, attrs.Name),
 			Relation: "parent",
 			User:     accountObject,
 		})

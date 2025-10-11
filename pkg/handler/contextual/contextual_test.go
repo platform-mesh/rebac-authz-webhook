@@ -65,7 +65,7 @@ func TestHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "should process request successfully",
+			name: "should process request non-parent, non-namespaced successfully",
 			req: authorization.Request{
 				SubjectAccessReview: v1.SubjectAccessReview{
 					Spec: v1.SubjectAccessReviewSpec{
@@ -134,6 +134,250 @@ func TestHandler(t *testing.T) {
 
 						assert.Equal(t, "test_platform-mesh_io_test:a/test-sample", in.TupleKey.Object)
 						assert.Equal(t, "get", in.TupleKey.Relation)
+
+						return &openfgav1.CheckResponse{
+							Allowed: true,
+						}, nil
+					},
+				)
+			},
+		},
+		{
+			name: "should process request non-parent, namespaced successfully",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:     "test.platform-mesh.io",
+							Version:   "v1alpha1",
+							Resource:  "tests",
+							Verb:      "get",
+							Name:      "test-sample",
+							Namespace: "test-ns",
+						},
+					},
+				},
+			},
+			res: authorization.Allowed(),
+			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
+				cl.EXPECT().
+					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					RunAndReturn(
+						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							acc := obj.(*v1alpha1.AccountInfo)
+
+							*acc = v1alpha1.AccountInfo{
+								Spec: v1alpha1.AccountInfoSpec{
+									Account: v1alpha1.AccountLocation{
+										OriginClusterId: "origin",
+										Name:            "origin-account",
+									},
+								},
+							}
+							return nil
+						},
+					)
+
+				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+
+				gv := schema.GroupVersion{
+					Group:   "test.platform-mesh.io",
+					Version: "v1alpha1",
+				}
+
+				rm.AddSpecific(
+					gv.WithKind("Test"),
+					gv.WithResource("tests"),
+					gv.WithResource("test"),
+					meta.RESTScopeNamespace,
+				)
+
+				cluster.EXPECT().GetRESTMapper().Return(rm)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
+					func(ctx context.Context, in *openfgav1.CheckRequest, opts ...grpc.CallOption) (*openfgav1.CheckResponse, error) {
+
+						tuples := in.ContextualTuples.TupleKeys
+
+						contains := slices.ContainsFunc(tuples, func(tk *openfgav1.TupleKey) bool {
+							return tk.Object == "core_namespace:a/test-ns" &&
+								tk.Relation == "parent" &&
+								tk.User == "core_platform-mesh_io_account:origin/origin-account"
+						})
+
+						assert.True(t, contains)
+
+						contains = slices.ContainsFunc(tuples, func(tk *openfgav1.TupleKey) bool {
+							return tk.User == "core_namespace:a/test-ns" &&
+								tk.Relation == "parent" &&
+								tk.Object == "test_platform-mesh_io_test:a/test-sample"
+						})
+
+						assert.True(t, contains)
+
+						assert.Equal(t, "test_platform-mesh_io_test:a/test-sample", in.TupleKey.Object)
+						assert.Equal(t, "get", in.TupleKey.Relation)
+
+						return &openfgav1.CheckResponse{
+							Allowed: true,
+						}, nil
+					},
+				)
+			},
+		},
+		{
+			name: "should process request parent, namespaced successfully",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:     "test.platform-mesh.io",
+							Version:   "v1alpha1",
+							Resource:  "tests",
+							Verb:      "list",
+							Name:      "test-sample",
+							Namespace: "test-ns",
+						},
+					},
+				},
+			},
+			res: authorization.Allowed(),
+			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
+				cl.EXPECT().
+					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					RunAndReturn(
+						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							acc := obj.(*v1alpha1.AccountInfo)
+
+							*acc = v1alpha1.AccountInfo{
+								Spec: v1alpha1.AccountInfoSpec{
+									Account: v1alpha1.AccountLocation{
+										OriginClusterId: "origin",
+										Name:            "origin-account",
+									},
+								},
+							}
+							return nil
+						},
+					)
+
+				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+
+				gv := schema.GroupVersion{
+					Group:   "test.platform-mesh.io",
+					Version: "v1alpha1",
+				}
+
+				rm.AddSpecific(
+					gv.WithKind("Test"),
+					gv.WithResource("tests"),
+					gv.WithResource("test"),
+					meta.RESTScopeNamespace,
+				)
+
+				cluster.EXPECT().GetRESTMapper().Return(rm)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
+					func(ctx context.Context, in *openfgav1.CheckRequest, opts ...grpc.CallOption) (*openfgav1.CheckResponse, error) {
+
+						tuples := in.ContextualTuples.TupleKeys
+
+						contains := slices.ContainsFunc(tuples, func(tk *openfgav1.TupleKey) bool {
+							return tk.Object == "core_namespace:a/test-ns" &&
+								tk.Relation == "parent" &&
+								tk.User == "core_platform-mesh_io_account:origin/origin-account"
+						})
+
+						assert.True(t, contains)
+
+						assert.Equal(t, "core_namespace:a/test-ns", in.TupleKey.Object)
+						assert.Equal(t, "list_test_platform-mesh_io_tests", in.TupleKey.Relation)
+
+						return &openfgav1.CheckResponse{
+							Allowed: true,
+						}, nil
+					},
+				)
+			},
+		},
+		{
+			name: "should process request parent, non-namespaced successfully",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "test.platform-mesh.io",
+							Version:  "v1alpha1",
+							Resource: "tests",
+							Verb:     "list",
+							Name:     "test-sample",
+						},
+					},
+				},
+			},
+			res: authorization.Allowed(),
+			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
+				cl.EXPECT().
+					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					RunAndReturn(
+						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							acc := obj.(*v1alpha1.AccountInfo)
+
+							*acc = v1alpha1.AccountInfo{
+								Spec: v1alpha1.AccountInfoSpec{
+									Account: v1alpha1.AccountLocation{
+										OriginClusterId: "origin",
+										Name:            "origin-account",
+									},
+								},
+							}
+							return nil
+						},
+					)
+
+				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+
+				gv := schema.GroupVersion{
+					Group:   "test.platform-mesh.io",
+					Version: "v1alpha1",
+				}
+
+				rm.AddSpecific(
+					gv.WithKind("Test"),
+					gv.WithResource("tests"),
+					gv.WithResource("test"),
+					meta.RESTScopeRoot,
+				)
+
+				cluster.EXPECT().GetRESTMapper().Return(rm)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
+					func(ctx context.Context, in *openfgav1.CheckRequest, opts ...grpc.CallOption) (*openfgav1.CheckResponse, error) {
+
+						tuples := in.ContextualTuples.TupleKeys
+
+						contains := slices.ContainsFunc(tuples, func(tk *openfgav1.TupleKey) bool {
+							return tk.Object == "test_platform-mesh_io_test:a/test-sample" &&
+								tk.Relation == "parent" &&
+								tk.User == "core_platform-mesh_io_account:origin/origin-account"
+						})
+
+						assert.True(t, contains)
+
+						assert.Equal(t, "core_platform-mesh_io_account:origin/origin-account", in.TupleKey.Object)
+						assert.Equal(t, "list_test_platform-mesh_io_tests", in.TupleKey.Relation)
 
 						return &openfgav1.CheckResponse{
 							Allowed: true,
