@@ -6,23 +6,20 @@ recursive: false
 require-template-schema-exists: true
 template: testify
 template-schema: '{{.Template}}.schema.json'
-dir: 'pkg/resolver/mocks'
+dir: 'pkg/handler/mocks'
 pkgname: mocks
 structname: '{{.InterfaceName}}'
+filename: '{{.InterfaceName}}.go'
 packages:
-  k8s.io/apimachinery/pkg/api/meta:
-    config:
-      include-interface-regex: RESTMapper
-      filename: restmapper.go
-  sigs.k8s.io/controller-runtime/pkg/kcp:
-    config:
-      filename: kcp.go
-  sigs.k8s.io/controller-runtime/pkg/client:
-    config:
-      include-interface-regex: Client
-      filename: k8sclient.go
   github.com/openfga/api/proto/openfga/v1:
     config:
-      dir: 'pkg/handler/mocks'
       include-interface-regex: OpenFGAServiceClient
-      filename: openfgaclient.go
+  sigs.k8s.io/controller-runtime/pkg/client:
+    config:
+      include-interface-regex: ^Client
+  sigs.k8s.io/controller-runtime/pkg/cluster:
+    config:
+      include-interface-regex: Cluster
+  sigs.k8s.io/multicluster-runtime/pkg/manager:
+    config:
+      include-interface-regex: Manager

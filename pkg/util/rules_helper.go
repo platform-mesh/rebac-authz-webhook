@@ -3,22 +3,18 @@ package util
 import (
 	"fmt"
 
-	authorizationv1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func ResolveOnParent(verb string) bool {
-	if verb == "create" || verb == "list" || verb == "watch" { // TODO: improve and consider list watch or individual watch
-		return true
-	}
-
-	return false
+	return verb == "create" || verb == "list" || verb == "watch"
 }
 
-func CapGroupToRelationLength(sar authorizationv1.SubjectAccessReview, maxLength int) string {
+func CapGroupToRelationLength(gvr schema.GroupVersionResource, maxLength int) string {
 
-	maxRelation := fmt.Sprintf("create_%s_%s", sar.Spec.ResourceAttributes.Group, sar.Spec.ResourceAttributes.Resource)
+	maxRelation := fmt.Sprintf("create_%s_%s", gvr.Group, gvr.Resource)
 
-	group := sar.Spec.ResourceAttributes.Group
+	group := gvr.Group
 	if group == "" {
 		group = "core"
 	}
