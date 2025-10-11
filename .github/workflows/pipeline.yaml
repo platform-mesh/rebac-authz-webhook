@@ -18,4 +18,5 @@ jobs:
     with:
       imageTagName: ghcr.io/platform-mesh/rebac-authz-webhook
       useTask: true
+      useLocalCoverageConfig: true
       coverageThresholdTotal: 80

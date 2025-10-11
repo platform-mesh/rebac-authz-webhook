@@ -101,7 +101,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	group := util.CapGroupToRelationLength(gvr, maxRelationLength)
 	group = strings.ReplaceAll(group, ".", "_")
 
-	objectType := fmt.Sprintf("%s_%s", gvr.Group, singular)
+	objectType := fmt.Sprintf("%s_%s", group, singular)
 	longestObjectType := fmt.Sprintf("create_%ss", objectType)
 	if len(longestObjectType) > maxRelationLength {
 		objectType = objectType[len(longestObjectType)-maxRelationLength:]
