@@ -38,5 +38,5 @@ func (n *nonResourceAttributesAuthorizer) Handle(ctx context.Context, req author
 		}
 	}
 
-	return authorization.NoOpinion() // TODO: maybe we should abort here, not sure how other authorizers will treat this
+	return authorization.Aborted()
 }

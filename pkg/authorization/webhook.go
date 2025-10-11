@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	authorizationv1beta1 "k8s.io/api/authorization/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -20,6 +21,7 @@ var authorizationCodecs = serializer.NewCodecFactory(authorizationScheme)
 
 func init() {
 	utilruntime.Must(authorizationv1.AddToScheme(authorizationScheme))
+	utilruntime.Must(authorizationv1beta1.AddToScheme(authorizationScheme))
 }
 
 var _ http.Handler = &Webhook{}
@@ -98,7 +100,11 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sar authorizationv1.SubjectAccessReview
+	req := Request{}
+	sar := unversionedSubjectAccessReview{}
+	sar.SubjectAccessReview = &req.SubjectAccessReview
+	sar.SetGroupVersionKind(authorizationv1.SchemeGroupVersion.WithKind("SubjectAccessReview"))
+
 	_, _, err = authorizationCodecs.UniversalDecoder().Decode(body, nil, &sar)
 	if err != nil {
 		wh.log.Error(err, "unable to decode the request")
@@ -108,8 +114,6 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: think of log constructor
 	wh.log.V(5).Info("received request")
-
-	req := Request{sar}
 
 	res := wh.Handler.Handle(ctx, req)
 	res.UID = req.UID
@@ -124,4 +128,9 @@ func (wh *Webhook) writeResponse(w io.Writer, resp Response) {
 	}
 
 	wh.log.V(5).Info("wrote response", "requestID", resp.UID, "authorized", resp.Status.Allowed)
+}
+
+// unversionedSubjectAccessReview is used to decode both v1 and v1beta1 TokenReview types.
+type unversionedSubjectAccessReview struct {
+	*authorizationv1.SubjectAccessReview
 }

@@ -61,7 +61,7 @@ func TestHandler(t *testing.T) {
 			res: authorization.Allowed(),
 		},
 		{
-			name: "should have no opinion if path does not match allowed prefix",
+			name: "should Abort if path does not match allowed prefix",
 			allowedPathPrefixes: []string{
 				"/api",
 			},
@@ -74,7 +74,7 @@ func TestHandler(t *testing.T) {
 					},
 				},
 			},
-			res: authorization.NoOpinion(),
+			res: authorization.Aborted(),
 		},
 	}
 	for _, test := range testCases {

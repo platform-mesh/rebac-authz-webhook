@@ -4,6 +4,7 @@ import (
 	"flag"
 
 	kcpapisv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/apis/v1alpha1"
+	tenancyv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/tenancy/v1alpha1"
 	accountsv1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	commonconfig "github.com/platform-mesh/golang-commons/config"
 	pmconfig "github.com/platform-mesh/golang-commons/config"
@@ -34,6 +35,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(accountsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kcpapisv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(tenancyv1alpha1.AddToScheme(scheme))
 
 	rootCmd.AddCommand(serveCmd)
 	cobra.OnInitialize(initLog)
