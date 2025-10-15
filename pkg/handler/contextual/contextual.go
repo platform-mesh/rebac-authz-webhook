@@ -2,11 +2,13 @@ package contextual
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,18 +22,20 @@ import (
 const maxRelationLength = 50
 
 type contextualAuthorizer struct {
-	clusterKey string
-	mgr        mcmanager.Manager
-	fga        openfgav1.OpenFGAServiceClient
+	clusterKey     string
+	mgr            mcmanager.Manager
+	fga            openfgav1.OpenFGAServiceClient
+	mapperProvider restmapper.Provider
 }
 
 var _ authorization.Handler = &contextualAuthorizer{}
 
-func New(mgr mcmanager.Manager, fga openfgav1.OpenFGAServiceClient, clusterKey string) authorization.Handler {
+func New(mgr mcmanager.Manager, fga openfgav1.OpenFGAServiceClient, mapperProvider restmapper.Provider, clusterKey string) authorization.Handler {
 	return &contextualAuthorizer{
-		mgr:        mgr,
-		fga:        fga,
-		clusterKey: clusterKey,
+		mgr:            mgr,
+		fga:            fga,
+		clusterKey:     clusterKey,
+		mapperProvider: mapperProvider,
 	}
 }
 
@@ -82,7 +86,12 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		Resource: attrs.Resource,
 	}
 
-	restMapper := accountInfoCluster.GetRESTMapper()
+	restMapper, ok := c.mapperProvider.Get(clusterName)
+	if !ok {
+		klog.ErrorS(errors.New("failed to get RESTMapper for cluster"), "clusterName", clusterName)
+		return authorization.NoOpinion()
+	}
+
 	gvk, err := restMapper.KindFor(gvr)
 	if err != nil {
 		klog.ErrorS(err, "failed to get GVK for GVR", "GVR", gvr)

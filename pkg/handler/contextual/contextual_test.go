@@ -26,6 +26,7 @@ func TestHandler(t *testing.T) {
 		res      authorization.Response
 		fgaMocks func(openfga *mocks.OpenFGAServiceClient)
 		k8sMocks func(client *mocks.Client, cluster *mocks.Cluster)
+		rmpMocks func(rmp *mocks.Provider)
 	}{
 		{
 			name: "should skip processing if no extra attrs present",
@@ -66,6 +67,43 @@ func TestHandler(t *testing.T) {
 			},
 		},
 		{
+			name: "should skip processing if restmapper cannot be retrieved",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
+				cl.EXPECT().
+					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					RunAndReturn(
+						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							acc := obj.(*v1alpha1.AccountInfo)
+
+							*acc = v1alpha1.AccountInfo{
+								Spec: v1alpha1.AccountInfoSpec{
+									Account: v1alpha1.AccountLocation{
+										OriginClusterId: "origin",
+										Name:            "origin-account",
+									},
+								},
+							}
+							return nil
+						},
+					)
+
+			},
+			rmpMocks: func(rmp *mocks.Provider) {
+				rmp.EXPECT().Get(mock.Anything).Return(nil, false)
+			},
+		},
+		{
 			name: "should process request non-parent, non-namespaced successfully",
 			req: authorization.Request{
 				SubjectAccessReview: v1.SubjectAccessReview{
@@ -103,6 +141,8 @@ func TestHandler(t *testing.T) {
 						},
 					)
 
+			},
+			rmpMocks: func(rmp *mocks.Provider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -117,7 +157,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				cluster.EXPECT().GetRESTMapper().Return(rm)
+				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -181,7 +221,8 @@ func TestHandler(t *testing.T) {
 							return nil
 						},
 					)
-
+			},
+			rmpMocks: func(rmp *mocks.Provider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -196,7 +237,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeNamespace,
 				)
 
-				cluster.EXPECT().GetRESTMapper().Return(rm)
+				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -268,7 +309,8 @@ func TestHandler(t *testing.T) {
 							return nil
 						},
 					)
-
+			},
+			rmpMocks: func(rmp *mocks.Provider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -283,7 +325,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeNamespace,
 				)
 
-				cluster.EXPECT().GetRESTMapper().Return(rm)
+				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -346,7 +388,8 @@ func TestHandler(t *testing.T) {
 							return nil
 						},
 					)
-
+			},
+			rmpMocks: func(rmp *mocks.Provider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -361,7 +404,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				cluster.EXPECT().GetRESTMapper().Return(rm)
+				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -398,6 +441,11 @@ func TestHandler(t *testing.T) {
 				test.k8sMocks(client, cluster)
 			}
 
+			rmp := mocks.NewProvider(t)
+			if test.rmpMocks != nil {
+				test.rmpMocks(rmp)
+			}
+
 			mgr.EXPECT().GetCluster(mock.Anything, mock.Anything).Return(cluster, nil).Maybe()
 			cluster.EXPECT().GetClient().Return(client).Maybe()
 
@@ -406,7 +454,7 @@ func TestHandler(t *testing.T) {
 				test.fgaMocks(openfga)
 			}
 
-			h := contextual.New(mgr, openfga, "authorization.kubernetes.io/cluster-name")
+			h := contextual.New(mgr, openfga, rmp, "authorization.kubernetes.io/cluster-name")
 
 			ctx := t.Context()
 
