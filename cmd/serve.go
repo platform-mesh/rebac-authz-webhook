@@ -29,6 +29,7 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/contextual"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/nonresourceattributes"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/orgs"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
 
 	"github.com/kcp-dev/multicluster-provider/apiexport"
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
@@ -120,6 +121,8 @@ var serveCmd = &cobra.Command{
 			klog.Exit(err, "failed to get orgs workspace")
 		}
 
+		mapperProvider := restmapper.New()
+
 		extraAttrClusterKey := serverCfg.Webhook.ClusterKey
 
 		mgr.GetWebhookServer().Register("/authz", authorization.New(
@@ -127,7 +130,7 @@ var serveCmd = &cobra.Command{
 			union.New(
 				nonresourceattributes.New("/api"),
 				orgs.New(fga, extraAttrClusterKey, ws.Spec.Cluster, storeRes.Stores[0].Id),
-				contextual.New(mgr, fga, extraAttrClusterKey),
+				contextual.New(mgr, fga, mapperProvider, extraAttrClusterKey),
 			),
 		))
 
@@ -136,6 +139,10 @@ var serveCmd = &cobra.Command{
 		}
 		if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 			klog.Exit(err, "unable to set up ready check")
+		}
+
+		if err := mgr.Add(mapperProvider); err != nil {
+			klog.Exit(err, "unable to register rest mapper provider")
 		}
 
 		klog.Info("Starting provider")
