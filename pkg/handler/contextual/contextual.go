@@ -2,6 +2,7 @@ package contextual
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -87,7 +88,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	restMapper, ok := c.mapperProvider.Get(clusterName)
 	if !ok {
-		klog.ErrorS(err, "failed to get RESTMapper for cluster", "clusterName", clusterName)
+		klog.ErrorS(errors.New("failed to get RESTMapper for cluster"), "clusterName", clusterName)
 		return authorization.NoOpinion()
 	}
 

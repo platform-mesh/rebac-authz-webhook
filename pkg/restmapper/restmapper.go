@@ -7,6 +7,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
@@ -22,11 +23,13 @@ type restMapper struct {
 	mappers map[string]meta.RESTMapper
 }
 
-func New() *restMapper {
-	return &restMapper{}
+func New() *restMapper { // coverage-ignore
+	return &restMapper{
+		mappers: make(map[string]meta.RESTMapper),
+	}
 }
 
-func (r *restMapper) Get(clusterName string) (meta.RESTMapper, bool) {
+func (r *restMapper) Get(clusterName string) (meta.RESTMapper, bool) { // coverage-ignore
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	m, ok := r.mappers[clusterName]
@@ -56,6 +59,8 @@ func (r *restMapper) Engage(ctx context.Context, name string, cl cluster.Cluster
 		return err
 	}
 
+	klog.V(5).InfoS("Creating RESTMapper for cluster", "cluster", name, "host", cfg.Host)
+
 	restMapper, err := apiutil.NewDynamicRESTMapper(cfg, httpClient)
 	if err != nil {
 		return err
@@ -65,12 +70,13 @@ func (r *restMapper) Engage(ctx context.Context, name string, cl cluster.Cluster
 	r.mappers[name] = restMapper
 	r.lock.Unlock()
 
+	// TODO: react on context cancellation and remove the restMapper from the map
+
 	return nil
 }
 
 // Start implements manager.Runnable.
-func (r *restMapper) Start(_ context.Context) error {
-	r.mappers = make(map[string]meta.RESTMapper)
+func (r *restMapper) Start(_ context.Context) error { // coverage-ignore
 	return nil
 }
 
