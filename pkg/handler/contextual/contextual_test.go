@@ -67,6 +67,43 @@ func TestHandler(t *testing.T) {
 			},
 		},
 		{
+			name: "should skip processing if restmapper cannot be retrieved",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
+				cl.EXPECT().
+					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					RunAndReturn(
+						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+							acc := obj.(*v1alpha1.AccountInfo)
+
+							*acc = v1alpha1.AccountInfo{
+								Spec: v1alpha1.AccountInfoSpec{
+									Account: v1alpha1.AccountLocation{
+										OriginClusterId: "origin",
+										Name:            "origin-account",
+									},
+								},
+							}
+							return nil
+						},
+					)
+
+			},
+			rmpMocks: func(rmp *mocks.Provider) {
+				rmp.EXPECT().Get(mock.Anything).Return(nil, false)
+			},
+		},
+		{
 			name: "should process request non-parent, non-namespaced successfully",
 			req: authorization.Request{
 				SubjectAccessReview: v1.SubjectAccessReview{
