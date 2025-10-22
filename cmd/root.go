@@ -1,29 +1,32 @@
 package cmd
 
 import (
-	"flag"
-	"os"
-
-	"github.com/go-logr/zerologr"
 	kcpapisv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/apis/v1alpha1"
 	tenancyv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/tenancy/v1alpha1"
 	accountsv1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	pmconfig "github.com/platform-mesh/golang-commons/config"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/component-base/logs"
+
+	logsapi "k8s.io/component-base/logs/api/v1"
 	"k8s.io/klog/v2"
-	"k8s.io/utils/ptr"
+
+	_ "k8s.io/component-base/logs/json/register"
 )
 
 var (
+	logOpts = logs.NewOptions()
+
 	rootCmd = &cobra.Command{
 		Use: "rebac-authz-webhook",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return logsapi.ValidateAndApply(logOpts, nil)
+		},
 	}
 
 	v          *viper.Viper
@@ -51,13 +54,8 @@ func init() {
 		panic(err)
 	}
 
-	klog.SetLogger(zerologr.New(ptr.To(zerolog.New(os.Stdout))))
+	logsapi.AddFlags(logOpts, rootCmd.PersistentFlags())
 
-	klogFlagSet := flag.NewFlagSet("klog", flag.ExitOnError)
-	klog.InitFlags(klogFlagSet)
-
-	pflag.CommandLine.AddGoFlagSet(klogFlagSet)
-	rootCmd.PersistentFlags().AddGoFlagSet(klogFlagSet)
 }
 
 func Execute() {
