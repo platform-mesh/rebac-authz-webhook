@@ -7,7 +7,7 @@ require (
 	github.com/kcp-dev/kcp/sdk v0.28.3
 	github.com/kcp-dev/multicluster-provider v0.2.1
 	github.com/openfga/api/proto v0.0.0-20250909173124-0ac19aac54f2
-	github.com/platform-mesh/account-operator v0.5.11
+	github.com/platform-mesh/account-operator v0.5.12
 	github.com/platform-mesh/golang-commons v0.7.6
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
@@ -20,7 +20,7 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/component-base v0.34.1
 	k8s.io/klog/v2 v2.130.1
-	sigs.k8s.io/controller-runtime v0.22.3
+	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/multicluster-runtime v0.21.0-alpha.9
 )
 
