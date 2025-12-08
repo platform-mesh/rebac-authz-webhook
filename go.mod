@@ -7,7 +7,7 @@ require (
 	github.com/kcp-dev/kcp/sdk v0.28.3
 	github.com/kcp-dev/multicluster-provider v0.2.1
 	github.com/openfga/api/proto v0.0.0-20251105142303-feed3db3d69d
-	github.com/platform-mesh/account-operator v0.5.35
+	github.com/platform-mesh/account-operator v0.5.36
 	github.com/platform-mesh/golang-commons v0.9.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -90,7 +90,7 @@ require (
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
