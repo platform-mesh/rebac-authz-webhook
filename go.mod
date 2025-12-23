@@ -8,7 +8,7 @@ require (
 	github.com/kcp-dev/multicluster-provider v0.2.1
 	github.com/openfga/api/proto v0.0.0-20251105142303-feed3db3d69d
 	github.com/platform-mesh/account-operator v0.5.53
-	github.com/platform-mesh/golang-commons v0.9.14
+	github.com/platform-mesh/golang-commons v0.9.16
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
