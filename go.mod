@@ -7,7 +7,7 @@ require (
 	github.com/kcp-dev/kcp/sdk v0.28.3
 	github.com/kcp-dev/multicluster-provider v0.2.1
 	github.com/openfga/api/proto v0.0.0-20251105142303-feed3db3d69d
-	github.com/platform-mesh/account-operator v0.5.53
+	github.com/platform-mesh/account-operator v0.5.54
 	github.com/platform-mesh/golang-commons v0.9.16
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -102,7 +102,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.34.3 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
-	k8s.io/utils v0.0.0-20251222233032-718f0e51e6d2 // indirect
+	k8s.io/utils v0.0.0-20260106112306-0fe9cd71b2f8 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
