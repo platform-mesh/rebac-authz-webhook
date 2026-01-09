@@ -128,7 +128,7 @@ var serveCmd = &cobra.Command{
 		mgr.GetWebhookServer().Register("/authz", authorization.New(
 			klog.NewKlogr(),
 			union.New(
-				nonresourceattributes.New("/api"),
+				nonresourceattributes.New("/api", "/openapi"),
 				orgs.New(fga, extraAttrClusterKey, ws.Spec.Cluster, storeRes.Stores[0].Id),
 				contextual.New(mgr, fga, mapperProvider, extraAttrClusterKey),
 			),
