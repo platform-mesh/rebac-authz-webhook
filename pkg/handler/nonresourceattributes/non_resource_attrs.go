@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
+
 	"k8s.io/klog/v2"
 )
 

@@ -4,35 +4,33 @@ import (
 	"crypto/tls"
 	"net/http"
 	"net/url"
-	"strings"
 
-	tenancyv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/tenancy/v1alpha1"
-	"github.com/spf13/cobra"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
-
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-
+	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization/union"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/contextual"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/nonresourceattributes"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/orgs"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
+	"github.com/spf13/cobra"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
+
+	"github.com/kcp-dev/logicalcluster/v3"
 	"github.com/kcp-dev/multicluster-provider/apiexport"
-	openfgav1 "github.com/openfga/api/proto/openfga/v1"
+	kcpclientset "github.com/kcp-dev/sdk/client/clientset/versioned/cluster"
 )
 
 // serveCmd represents the serve command
@@ -102,24 +100,26 @@ var serveCmd = &cobra.Command{
 		klog.InfoS("using OpenFGA store", "id", storeRes.Stores[0].Id)
 
 		rootCfg := rest.CopyConfig(kcpCfg)
-		host, err := url.JoinPath(strings.Split(rootCfg.Host, "services")[0], "/clusters/root")
+		rootURL, err := url.Parse(rootCfg.Host)
 		if err != nil {
-			klog.Exit(err, "failed to construct scoped cluster URL")
-		}
-		rootCfg.Host = host
-
-		klog.InfoS("setting up root cluster client", "host", rootCfg.Host)
-
-		rootClient, err := client.New(rootCfg, client.Options{Scheme: scheme})
-		if err != nil {
-			klog.Exit(err, "failed to construct root cluster client")
+			klog.Exit(err, "failed to parse root cluster URL")
 		}
 
-		var ws tenancyv1alpha1.Workspace
-		err = rootClient.Get(ctx, types.NamespacedName{Name: "orgs"}, &ws)
+		rootURL.Path = ""
+		rootCfg.Host = rootURL.String()
+
+		clusterClient, err := kcpclientset.NewForConfig(rootCfg)
 		if err != nil {
-			klog.Exit(err, "failed to get orgs workspace")
+			klog.Exit(err, "failed to construct cluster client")
 		}
+
+		orgsCluster, err := clusterClient.Cluster(logicalcluster.NewPath("root:orgs")).CoreV1alpha1().LogicalClusters().Get(ctx, "cluster", metav1.GetOptions{})
+		if err != nil {
+			klog.Exit(err, "failed to get orgs cluster")
+		}
+
+		orgsClusterID := logicalcluster.From(orgsCluster)
+		klog.InfoS("found orgs cluster", "name", orgsCluster.Name, "cluster", orgsClusterID.String())
 
 		mapperProvider := restmapper.New()
 
@@ -128,8 +128,8 @@ var serveCmd = &cobra.Command{
 		mgr.GetWebhookServer().Register("/authz", authorization.New(
 			klog.NewKlogr(),
 			union.New(
-				nonresourceattributes.New("/api", "/openapi"),
-				orgs.New(fga, extraAttrClusterKey, ws.Spec.Cluster, storeRes.Stores[0].Id),
+				nonresourceattributes.New(serverCfg.Webhook.AllowedNonResourcePrefixes...),
+				orgs.New(fga, extraAttrClusterKey, orgsClusterID.String(), storeRes.Stores[0].Id),
 				contextual.New(mgr, fga, mapperProvider, extraAttrClusterKey),
 			),
 		))

@@ -10,6 +10,7 @@ import (
 
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/stretchr/testify/assert"
+
 	v1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
