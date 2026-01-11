@@ -6,6 +6,7 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/nonresourceattributes"
 	"github.com/stretchr/testify/assert"
+
 	v1 "k8s.io/api/authorization/v1"
 )
 

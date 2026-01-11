@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/go-logr/logr"
+
 	authorizationv1 "k8s.io/api/authorization/v1"
 	authorizationv1beta1 "k8s.io/api/authorization/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -84,7 +85,7 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	defer r.Body.Close()
+	defer r.Body.Close() //nolint:errcheck
 
 	if contentType := r.Header.Get("Content-Type"); contentType != "application/json" {
 		err := fmt.Errorf("contentType=%s, expected application/json", contentType)

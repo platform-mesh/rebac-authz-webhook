@@ -6,6 +6,7 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
 	"github.com/stretchr/testify/assert"
+
 	"k8s.io/client-go/rest"
 )
 

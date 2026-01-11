@@ -7,16 +7,16 @@ import (
 	"strings"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
+	accounts1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
-
-	accounts1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 )
 
 const maxRelationLength = 50

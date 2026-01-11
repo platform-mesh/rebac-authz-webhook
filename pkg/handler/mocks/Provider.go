@@ -8,8 +8,9 @@ import (
 	"context"
 
 	mock "github.com/stretchr/testify/mock"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+
+	"k8s.io/apimachinery/pkg/api/meta"
 )
 
 // NewProvider creates a new instance of Provider. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
