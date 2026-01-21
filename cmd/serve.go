@@ -51,7 +51,12 @@ var serveCmd = &cobra.Command{
 			return otelhttp.NewTransport(rt)
 		})
 
-		provider, err := apiexport.New(kcpCfg, apiexport.Options{
+		endpointSliceName := serverCfg.KCP.APIExportEndpointSliceName
+		if endpointSliceName == "" {
+			klog.Warning("no endpoint slice name provided")
+		}
+
+		provider, err := apiexport.New(kcpCfg, endpointSliceName, apiexport.Options{
 			Scheme: scheme,
 		})
 		if err != nil {
@@ -144,13 +149,6 @@ var serveCmd = &cobra.Command{
 		if err := mgr.Add(mapperProvider); err != nil {
 			klog.Exit(err, "unable to register rest mapper provider")
 		}
-
-		klog.Info("Starting provider")
-		go func() {
-			if err := provider.Run(ctx, mgr); err != nil {
-				klog.Exit(err, "unable to run provider")
-			}
-		}()
 
 		klog.Info("starting manager")
 		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
