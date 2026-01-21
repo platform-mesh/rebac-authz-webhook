@@ -14,7 +14,7 @@ import (
 	logsapi "k8s.io/component-base/logs/api/v1"
 	"k8s.io/klog/v2"
 
-	kcpapisv1alpha1 "github.com/kcp-dev/kcp/sdk/apis/apis/v1alpha1"
+	kcpsdkapisv1alpha1 "github.com/kcp-dev/sdk/apis/apis/v1alpha1"
 
 	_ "k8s.io/component-base/logs/json/register"
 )
@@ -36,7 +36,7 @@ var (
 )
 
 func init() {
-	utilruntime.Must(kcpapisv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kcpsdkapisv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(accountsv1alpha1.AddToScheme(scheme))
 
