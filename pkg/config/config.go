@@ -13,7 +13,6 @@ type Config struct {
 
 	KCP struct {
 		KubeconfigPath string `mapstructure:"kcp-kubeconfig-path" default:""`
-		// APIExportEndpointSliceName to watch. Empty string ("") enables auto-discovery of all APIExportEndpointSlice resources.
 		APIExportEndpointSliceName string `mapstructure:"kcp-api-export-endpoint-slice-name" default:""`
 	} `mapstructure:",squash"`
 }
