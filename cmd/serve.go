@@ -25,7 +25,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 
 	"github.com/kcp-dev/logicalcluster/v3"
@@ -42,28 +41,39 @@ var serveCmd = &cobra.Command{
 
 		ctrl.SetLogger(klog.NewKlogr())
 
-		kcpCfg, err := clientcmd.BuildConfigFromFlags("", serverCfg.KCP.KubeconfigPath)
-		if err != nil {
-			klog.Exit(err, "unable to construct cluster provider")
-		}
+		// Use ctrl.GetConfigOrDie() which respects KUBECONFIG environment variable
+		// This allows the operator to provide a kubeconfig secret that points to Root KCP API Server
+		// The KUBECONFIG env var is set in the Helm chart deployment template
+		// This is needed because cache.New() requires API Server Discovery which only works with Root KCP API Server
+		// The Virtual Workspace kubeconfig doesn't support API Server Discovery for root KCP CRDs like APIExportEndpointSlice
+		restCfg := ctrl.GetConfigOrDie()
 
-		kcpCfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
+		restCfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
 			return otelhttp.NewTransport(rt)
 		})
 
+		// Use Root KCP config for apiexport.New() (like iam-service)
+		// cache.New() inside the provider needs Root KCP API Server to discover APIExportEndpointSlice
+		// The provider will then use Virtual Workspace URLs from the slice for actual cluster access
 		endpointSliceName := serverCfg.KCP.APIExportEndpointSliceName
 		if endpointSliceName == "" {
-			klog.Warning("no endpoint slice name provided")
+			// Default to "core.platform-mesh.io" if not specified (like iam-service)
+			// Auto-discovery with empty string doesn't work correctly with the cache filter
+			endpointSliceName = "core.platform-mesh.io"
+			klog.Info("no endpoint slice name provided, using default", "name", endpointSliceName)
+		} else {
+			klog.InfoS("using endpoint slice name", "name", endpointSliceName)
 		}
 
-		provider, err := apiexport.New(kcpCfg, endpointSliceName, apiexport.Options{
+		provider, err := apiexport.New(restCfg, endpointSliceName, apiexport.Options{
 			Scheme: scheme,
 		})
 		if err != nil {
 			klog.Exit(err, "unable to construct cluster provider")
 		}
 
-		mgr, err := mcmanager.New(kcpCfg, provider, mcmanager.Options{
+		// Use Root KCP config for manager
+		mgr, err := mcmanager.New(restCfg, provider, mcmanager.Options{
 			Scheme: scheme,
 			Logger: klog.NewKlogr(),
 			WebhookServer: webhook.NewServer(webhook.Options{
@@ -104,7 +114,7 @@ var serveCmd = &cobra.Command{
 		}
 		klog.InfoS("using OpenFGA store", "id", storeRes.Stores[0].Id)
 
-		rootCfg := rest.CopyConfig(kcpCfg)
+		rootCfg := rest.CopyConfig(restCfg)
 		rootURL, err := url.Parse(rootCfg.Host)
 		if err != nil {
 			klog.Exit(err, "failed to parse root cluster URL")
