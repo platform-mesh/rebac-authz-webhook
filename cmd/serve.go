@@ -56,14 +56,7 @@ var serveCmd = &cobra.Command{
 		// cache.New() inside the provider needs Root KCP API Server to discover APIExportEndpointSlice
 		// The provider will then use Virtual Workspace URLs from the slice for actual cluster access
 		endpointSliceName := serverCfg.KCP.APIExportEndpointSliceName
-		if endpointSliceName == "" {
-			// Default to "core.platform-mesh.io" if not specified (like iam-service)
-			// Auto-discovery with empty string doesn't work correctly with the cache filter
-			endpointSliceName = "core.platform-mesh.io"
-			klog.Info("no endpoint slice name provided, using default", "name", endpointSliceName)
-		} else {
-			klog.InfoS("using endpoint slice name", "name", endpointSliceName)
-		}
+		klog.InfoS("using endpoint slice name", "name", endpointSliceName)
 
 		provider, err := apiexport.New(restCfg, endpointSliceName, apiexport.Options{
 			Scheme: scheme,
