@@ -8,6 +8,18 @@
 
 The Platform Mesh IAM Authorizaton Webhook is a kubernetes authorization webhook that uses openFGA to answer authorization requests from kubernetes.
 
+## KCP Configuration
+
+The webhook requires access to the Root KCP API Server (not Virtual Workspace) for API Server Discovery. This is necessary because:
+
+- `cache.New()` inside the provider needs Root KCP API Server to discover `APIExportEndpointSlice` resources
+- Virtual Workspace kubeconfig doesn't support API Server Discovery for root KCP CRDs like `APIExportEndpointSlice`
+- The provider will then use Virtual Workspace URLs from the endpoint slice for actual cluster access
+
+The webhook uses `ctrl.GetConfigOrDie()` which respects the `KUBECONFIG` environment variable. The Helm chart deployment template sets this environment variable to point to a kubeconfig secret provided by the platform-mesh-operator that contains the Root KCP API Server URL.
+
+The default `apiExportEndpointSliceName` is `"core.platform-mesh.io"` (configured in the code). This can be overridden via the `--kcp-api-export-endpoint-slice-name` command-line argument if needed.
+
 ## Releasing
 
 The release is performed automatically through a GitHub Actions Workflow.

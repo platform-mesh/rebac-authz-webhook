@@ -25,7 +25,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 
 	"github.com/kcp-dev/logicalcluster/v3"
@@ -42,23 +41,24 @@ var serveCmd = &cobra.Command{
 
 		ctrl.SetLogger(klog.NewKlogr())
 
-		kcpCfg, err := clientcmd.BuildConfigFromFlags("", serverCfg.KCP.KubeconfigPath)
-		if err != nil {
-			klog.Exit(err, "unable to construct cluster provider")
-		}
+		restCfg := ctrl.GetConfigOrDie()
 
-		kcpCfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
+		restCfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
 			return otelhttp.NewTransport(rt)
 		})
 
-		provider, err := apiexport.New(kcpCfg, apiexport.Options{
+		endpointSliceName := serverCfg.KCP.APIExportEndpointSliceName
+		klog.InfoS("using endpoint slice name", "name", endpointSliceName)
+
+		provider, err := apiexport.New(restCfg, endpointSliceName, apiexport.Options{
 			Scheme: scheme,
 		})
 		if err != nil {
 			klog.Exit(err, "unable to construct cluster provider")
 		}
 
-		mgr, err := mcmanager.New(kcpCfg, provider, mcmanager.Options{
+		// Use Root KCP config for manager
+		mgr, err := mcmanager.New(restCfg, provider, mcmanager.Options{
 			Scheme: scheme,
 			Logger: klog.NewKlogr(),
 			WebhookServer: webhook.NewServer(webhook.Options{
@@ -99,7 +99,7 @@ var serveCmd = &cobra.Command{
 		}
 		klog.InfoS("using OpenFGA store", "id", storeRes.Stores[0].Id)
 
-		rootCfg := rest.CopyConfig(kcpCfg)
+		rootCfg := rest.CopyConfig(restCfg)
 		rootURL, err := url.Parse(rootCfg.Host)
 		if err != nil {
 			klog.Exit(err, "failed to parse root cluster URL")
@@ -144,13 +144,6 @@ var serveCmd = &cobra.Command{
 		if err := mgr.Add(mapperProvider); err != nil {
 			klog.Exit(err, "unable to register rest mapper provider")
 		}
-
-		klog.Info("Starting provider")
-		go func() {
-			if err := provider.Run(ctx, mgr); err != nil {
-				klog.Exit(err, "unable to run provider")
-			}
-		}()
 
 		klog.Info("starting manager")
 		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

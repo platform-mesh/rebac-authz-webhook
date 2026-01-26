@@ -12,6 +12,10 @@ tasks:
     cmds:
       - task --list-all
   ## Setup
+  setup:mockery:
+    internal: true
+    cmds:
+      - test -s {{.LOCAL_BIN}}/mockery || GOBIN=$(pwd)/{{.LOCAL_BIN}} go install github.com/vektra/mockery/v3@v3.6.1
   setup:golangci-lint:
     internal: true
     cmds:
@@ -50,3 +54,7 @@ tasks:
     cmds:
       - task: cover
       - "{{.LOCAL_BIN}}/go-test-coverage --profile cover.out --config ./.testcoverage.yml"
+  mockery:
+    deps: [ setup:mockery ]
+    cmds:
+      - "{{.LOCAL_BIN}}/mockery"
