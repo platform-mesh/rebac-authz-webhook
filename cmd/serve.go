@@ -41,20 +41,12 @@ var serveCmd = &cobra.Command{
 
 		ctrl.SetLogger(klog.NewKlogr())
 
-		// Use ctrl.GetConfigOrDie() which respects KUBECONFIG environment variable
-		// This allows the operator to provide a kubeconfig secret that points to Root KCP API Server
-		// The KUBECONFIG env var is set in the Helm chart deployment template
-		// This is needed because cache.New() requires API Server Discovery which only works with Root KCP API Server
-		// The Virtual Workspace kubeconfig doesn't support API Server Discovery for root KCP CRDs like APIExportEndpointSlice
 		restCfg := ctrl.GetConfigOrDie()
 
 		restCfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
 			return otelhttp.NewTransport(rt)
 		})
 
-		// Use Root KCP config for apiexport.New() (like iam-service)
-		// cache.New() inside the provider needs Root KCP API Server to discover APIExportEndpointSlice
-		// The provider will then use Virtual Workspace URLs from the slice for actual cluster access
 		endpointSliceName := serverCfg.KCP.APIExportEndpointSliceName
 		klog.InfoS("using endpoint slice name", "name", endpointSliceName)
 
