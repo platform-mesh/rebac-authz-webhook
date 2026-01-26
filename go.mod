@@ -4,12 +4,11 @@ go 1.25.0
 
 require (
 	github.com/go-logr/logr v1.4.3
-	github.com/kcp-dev/kcp/sdk v0.28.3
 	github.com/kcp-dev/logicalcluster/v3 v3.0.5
 	github.com/kcp-dev/multicluster-provider v0.3.3
 	github.com/kcp-dev/sdk v0.29.0
 	github.com/openfga/api/proto v0.0.0-20260122181957-618e7e0a4878
-	github.com/platform-mesh/account-operator v0.8.2
+	github.com/platform-mesh/account-operator v0.8.3
 	github.com/platform-mesh/golang-commons v0.9.23
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
