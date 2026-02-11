@@ -80,9 +80,14 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	attrs := req.Spec.ResourceAttributes
 
+	version := attrs.Version
+	if version == "*" {
+		version = ""
+	}
+
 	gvr := schema.GroupVersionResource{
 		Group:    attrs.Group,
-		Version:  attrs.Version,
+		Version:  version,
 		Resource: attrs.Resource,
 	}
 
