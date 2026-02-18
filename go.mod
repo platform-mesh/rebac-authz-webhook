@@ -9,7 +9,7 @@ require (
 	github.com/kcp-dev/sdk v0.30.0
 	github.com/openfga/api/proto v0.0.0-20260217232149-f917ddb000ce
 	github.com/platform-mesh/account-operator v0.11.4
-	github.com/platform-mesh/golang-commons v0.9.39
+	github.com/platform-mesh/golang-commons v0.9.40
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
