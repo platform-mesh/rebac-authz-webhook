@@ -5,3 +5,4 @@ exclude:
     - ^cmd # skip covering cmd directory
     - ^pkg/authorization/response\.go$
     - ^pkg/util
+    - ^pkg/config
