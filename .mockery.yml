@@ -17,6 +17,13 @@ packages:
   github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper:
     config:
       include-interface-regex: Provider
+      filename: RestMapperProvider.go
+      structname: RestMapperProvider
+  github.com/platform-mesh/rebac-authz-webhook/pkg/storecache:
+    config:
+      include-interface-regex: Provider
+      filename: StoreCacheProvider.go
+      structname: StoreCacheProvider
   sigs.k8s.io/controller-runtime/pkg/client:
     config:
       include-interface-regex: ^Client

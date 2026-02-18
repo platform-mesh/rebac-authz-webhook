@@ -22,12 +22,13 @@ import (
 
 func TestHandler(t *testing.T) {
 	testCases := []struct {
-		name     string
-		req      authorization.Request
-		res      authorization.Response
-		fgaMocks func(openfga *mocks.OpenFGAServiceClient)
-		k8sMocks func(client *mocks.Client, cluster *mocks.Cluster)
-		rmpMocks func(rmp *mocks.Provider)
+		name            string
+		req             authorization.Request
+		res             authorization.Response
+		fgaMocks        func(openfga *mocks.OpenFGAServiceClient)
+		k8sMocks        func(client *mocks.Client, cluster *mocks.Cluster)
+		rmpMocks        func(rmp *mocks.RestMapperProvider)
+		storeCacheMocks func(storeCache *mocks.StoreCacheProvider)
 	}{
 		{
 			name: "should skip processing if no extra attrs present",
@@ -48,6 +49,23 @@ func TestHandler(t *testing.T) {
 			res: authorization.NoOpinion(),
 		},
 		{
+			name: "should skip processing if store not found in cache",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			storeCacheMocks: func(storeCache *mocks.StoreCacheProvider) {
+				storeCache.EXPECT().Get("a").Return("", false)
+			},
+		},
+		{
 			name: "should skip processing if accountinfo cannot be retrieved",
 			req: authorization.Request{
 				SubjectAccessReview: v1.SubjectAccessReview{
@@ -60,6 +78,9 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.NoOpinion(),
+			storeCacheMocks: func(storeCache *mocks.StoreCacheProvider) {
+				storeCache.EXPECT().Get("a").Return("store-id", true)
+			},
 			k8sMocks: func(client *mocks.Client, cluster *mocks.Cluster) {
 				client.EXPECT().
 					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -80,6 +101,9 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.NoOpinion(),
+			storeCacheMocks: func(storeCache *mocks.StoreCacheProvider) {
+				storeCache.EXPECT().Get("a").Return("store-id", true)
+			},
 			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
 				cl.EXPECT().
 					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -100,7 +124,7 @@ func TestHandler(t *testing.T) {
 					)
 
 			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			rmpMocks: func(rmp *mocks.RestMapperProvider) {
 				rmp.EXPECT().Get(mock.Anything).Return(nil, false)
 			},
 		},
@@ -123,6 +147,9 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
+			storeCacheMocks: func(storeCache *mocks.StoreCacheProvider) {
+				storeCache.EXPECT().Get("a").Return("store-id", true)
+			},
 			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
 				cl.EXPECT().
 					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -143,7 +170,7 @@ func TestHandler(t *testing.T) {
 					)
 
 			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			rmpMocks: func(rmp *mocks.RestMapperProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -174,6 +201,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "test_platform-mesh_io_test:a/test-sample", in.TupleKey.Object)
 						assert.Equal(t, "get", in.TupleKey.Relation)
 
@@ -204,6 +232,9 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
+			storeCacheMocks: func(storeCache *mocks.StoreCacheProvider) {
+				storeCache.EXPECT().Get("a").Return("store-id", true)
+			},
 			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
 				cl.EXPECT().
 					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -223,7 +254,7 @@ func TestHandler(t *testing.T) {
 						},
 					)
 			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			rmpMocks: func(rmp *mocks.RestMapperProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -262,6 +293,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "test_platform-mesh_io_test:a/test-sample", in.TupleKey.Object)
 						assert.Equal(t, "get", in.TupleKey.Relation)
 
@@ -292,6 +324,9 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
+			storeCacheMocks: func(storeCache *mocks.StoreCacheProvider) {
+				storeCache.EXPECT().Get("a").Return("store-id", true)
+			},
 			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
 				cl.EXPECT().
 					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -311,7 +346,7 @@ func TestHandler(t *testing.T) {
 						},
 					)
 			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			rmpMocks: func(rmp *mocks.RestMapperProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -342,6 +377,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "core_namespace:a/test-ns", in.TupleKey.Object)
 						assert.Equal(t, "list_test_platform-mesh_io_tests", in.TupleKey.Relation)
 
@@ -371,6 +407,9 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
+			storeCacheMocks: func(storeCache *mocks.StoreCacheProvider) {
+				storeCache.EXPECT().Get("a").Return("store-id", true)
+			},
 			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
 				cl.EXPECT().
 					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -390,7 +429,7 @@ func TestHandler(t *testing.T) {
 						},
 					)
 			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			rmpMocks: func(rmp *mocks.RestMapperProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -421,6 +460,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "core_platform-mesh_io_account:origin/origin-account", in.TupleKey.Object)
 						assert.Equal(t, "list_test_platform-mesh_io_tests", in.TupleKey.Relation)
 
@@ -442,9 +482,14 @@ func TestHandler(t *testing.T) {
 				test.k8sMocks(client, cluster)
 			}
 
-			rmp := mocks.NewProvider(t)
+			rmp := mocks.NewRestMapperProvider(t)
 			if test.rmpMocks != nil {
 				test.rmpMocks(rmp)
+			}
+
+			storeCache := mocks.NewStoreCacheProvider(t)
+			if test.storeCacheMocks != nil {
+				test.storeCacheMocks(storeCache)
 			}
 
 			mgr.EXPECT().GetCluster(mock.Anything, mock.Anything).Return(cluster, nil).Maybe()
@@ -455,7 +500,7 @@ func TestHandler(t *testing.T) {
 				test.fgaMocks(openfga)
 			}
 
-			h := contextual.New(mgr, openfga, rmp, "authorization.kubernetes.io/cluster-name")
+			h := contextual.New(mgr, openfga, rmp, storeCache, "authorization.kubernetes.io/cluster-name")
 
 			ctx := t.Context()
 

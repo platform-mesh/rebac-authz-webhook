@@ -10,6 +10,7 @@ import (
 	accounts1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/storecache"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
@@ -26,16 +27,18 @@ type contextualAuthorizer struct {
 	mgr            mcmanager.Manager
 	fga            openfgav1.OpenFGAServiceClient
 	mapperProvider restmapper.Provider
+	storeCache     storecache.Provider
 }
 
 var _ authorization.Handler = &contextualAuthorizer{}
 
-func New(mgr mcmanager.Manager, fga openfgav1.OpenFGAServiceClient, mapperProvider restmapper.Provider, clusterKey string) authorization.Handler {
+func New(mgr mcmanager.Manager, fga openfgav1.OpenFGAServiceClient, mapperProvider restmapper.Provider, storeCache storecache.Provider, clusterKey string) authorization.Handler {
 	return &contextualAuthorizer{
-		mgr:            mgr,
 		fga:            fga,
+		mgr:            mgr,
 		clusterKey:     clusterKey,
 		mapperProvider: mapperProvider,
+		storeCache:     storeCache,
 	}
 }
 
@@ -63,6 +66,14 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		return authorization.NoOpinion()
 	}
 
+	storeID, ok := c.storeCache.Get(clusterName)
+	if !ok {
+		klog.V(5).InfoS("cluster not found in store cache, skipping", "clusterName", clusterName)
+		return authorization.NoOpinion()
+	}
+
+	klog.V(5).InfoS("found store ID in cache for cluster", "clusterName", clusterName, "storeID", storeID)
+
 	accountInfoCluster, err := c.mgr.GetCluster(ctx, clusterName)
 	if err != nil {
 		klog.ErrorS(err, "failed to get cluster from manager", "clusterName", clusterName)
@@ -82,6 +93,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	version := attrs.Version
 	if version == "*" {
+		// For some cluster level resources, the version may be set to "*". In that case, we should treat it as empty string to avoid issues with RESTMapper.
 		version = ""
 	}
 
@@ -170,7 +182,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	klog.InfoS("calling fga", "object", object, "relation", relation)
 
 	check := &openfgav1.CheckRequest{
-		StoreId: info.Spec.FGA.Store.Id,
+		StoreId: storeID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
 			Object:   object,
 			Relation: relation,
