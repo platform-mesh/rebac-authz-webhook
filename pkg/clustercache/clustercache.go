@@ -7,7 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kcp-dev/logicalcluster/v3"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -15,10 +19,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+
+	"github.com/kcp-dev/logicalcluster/v3"
 )
 
 type ClusterInfo struct {
