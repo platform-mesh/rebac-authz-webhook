@@ -6,15 +6,16 @@ import (
 	"strings"
 	"sync"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 )
 
 type Provider interface {
@@ -105,6 +106,10 @@ func (s *storeCache) Engage(ctx context.Context, name string, cl cluster.Cluster
 		Kind:    "Store",
 	})
 	err = s.orgsClient.Get(ctx, types.NamespacedName{Name: orgName}, &store)
+	if err != nil {
+		klog.V(5).ErrorS(err, "Failed to get Store for org", "clusterName", name, "orgName", orgName)
+		return err
+	}
 
 	storeID, found, err := unstructured.NestedString(store.Object, "status", "storeId")
 	if err != nil || !found {
