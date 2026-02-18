@@ -119,8 +119,6 @@ github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
-github.com/platform-mesh/account-operator v0.11.4 h1:mvu78My7ab8etacgLmsoCNDqPTceqwH7LwoY8zxNuk0=
-github.com/platform-mesh/account-operator v0.11.4/go.mod h1:HaM/OvJV/yXBaVDgMHOXZQgi3J2hN/LkVy8vF+xE7z8=
 github.com/platform-mesh/golang-commons v0.9.40 h1:CqwKoA/GwhUhBVa4xpnfqoxBTjdyVwcnhLgUpQZVMkM=
 github.com/platform-mesh/golang-commons v0.9.40/go.mod h1:38+FZ3/2w7RQKoKfViejx4eQt2hVmSP2k4/QB8YE1H8=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

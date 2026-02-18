@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	accountsv1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	pmconfig "github.com/platform-mesh/golang-commons/config"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"github.com/spf13/cobra"
@@ -38,7 +37,6 @@ var (
 func init() {
 	utilruntime.Must(kcpsdkapisv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(accountsv1alpha1.AddToScheme(scheme))
 
 	rootCmd.AddCommand(serveCmd)
 

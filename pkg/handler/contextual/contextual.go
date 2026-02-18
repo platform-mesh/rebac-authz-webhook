@@ -2,40 +2,34 @@ package contextual
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
-	accounts1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
-	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 )
 
 const maxRelationLength = 50
 
 type contextualAuthorizer struct {
-	clusterKey     string
-	mgr            mcmanager.Manager
-	fga            openfgav1.OpenFGAServiceClient
-	mapperProvider restmapper.Provider
+	clusterKey   string
+	fga          openfgav1.OpenFGAServiceClient
+	clusterCache clustercache.Provider
 }
 
 var _ authorization.Handler = &contextualAuthorizer{}
 
-func New(mgr mcmanager.Manager, fga openfgav1.OpenFGAServiceClient, mapperProvider restmapper.Provider, clusterKey string) authorization.Handler {
+func New(fga openfgav1.OpenFGAServiceClient, clusterCache clustercache.Provider, clusterKey string) authorization.Handler {
 	return &contextualAuthorizer{
-		mgr:            mgr,
-		fga:            fga,
-		clusterKey:     clusterKey,
-		mapperProvider: mapperProvider,
+		fga:          fga,
+		clusterKey:   clusterKey,
+		clusterCache: clusterCache,
 	}
 }
 
@@ -63,25 +57,23 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		return authorization.NoOpinion()
 	}
 
-	accountInfoCluster, err := c.mgr.GetCluster(ctx, clusterName)
-	if err != nil {
-		klog.ErrorS(err, "failed to get cluster from manager", "clusterName", clusterName)
+	clusterInfo, ok := c.clusterCache.Get(clusterName)
+	if !ok {
+		klog.V(5).InfoS("cluster not found in cache, skipping", "clusterName", clusterName)
 		return authorization.NoOpinion()
 	}
 
-	var info accounts1alpha1.AccountInfo
-	err = accountInfoCluster.GetClient().Get(ctx, types.NamespacedName{Name: "account"}, &info)
-	if err != nil {
-		klog.ErrorS(err, "failed to get AccountInfo from cluster", "clusterName", clusterName)
-		return authorization.NoOpinion()
-	}
-
-	klog.V(5).InfoS("fetched AccountInfo from cluster")
+	klog.V(5).InfoS("found cluster info in cache",
+		"clusterName", clusterName,
+		"storeID", clusterInfo.StoreID,
+		"accountName", clusterInfo.AccountName,
+		"parentClusterID", clusterInfo.ParentClusterID)
 
 	attrs := req.Spec.ResourceAttributes
 
 	version := attrs.Version
 	if version == "*" {
+		// For some cluster level resources, the version may be set to "*". In that case, we should treat it as empty string to avoid issues with RESTMapper.
 		version = ""
 	}
 
@@ -91,13 +83,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		Resource: attrs.Resource,
 	}
 
-	restMapper, ok := c.mapperProvider.Get(clusterName)
-	if !ok {
-		klog.ErrorS(errors.New("failed to get RESTMapper for cluster"), "clusterName", clusterName)
-		return authorization.NoOpinion()
-	}
-
-	gvk, err := restMapper.KindFor(gvr)
+	gvk, err := clusterInfo.RESTMapper.KindFor(gvr)
 	if err != nil {
 		klog.ErrorS(err, "failed to get GVK for GVR", "GVR", gvr)
 		return authorization.NoOpinion()
@@ -105,13 +91,13 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	klog.V(5).InfoS("mapped GVR to GVK", "GVK", gvk)
 
-	isNamespaced, err := apiutil.IsGVKNamespaced(gvk, restMapper)
+	isNamespaced, err := apiutil.IsGVKNamespaced(gvk, clusterInfo.RESTMapper)
 	if err != nil {
 		klog.ErrorS(err, "failed to determine if GVK is namespaced", "GVK", gvk)
 		return authorization.NoOpinion()
 	}
 
-	singular, err := restMapper.ResourceSingularizer(attrs.Resource)
+	singular, err := clusterInfo.RESTMapper.ResourceSingularizer(attrs.Resource)
 	if err != nil {
 		klog.ErrorS(err, "failed to singularize resource", "resource", attrs.Resource)
 		return authorization.NoOpinion()
@@ -131,7 +117,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	hasParent := util.ResolveOnParent(attrs.Verb)
 
-	accountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s", info.Spec.Account.OriginClusterId, info.Spec.Account.Name)
+	accountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s", clusterInfo.ParentClusterID, clusterInfo.AccountName)
 
 	if hasParent {
 		relation = fmt.Sprintf("%s_%s_%s", relation, group, gvr.Resource)
@@ -170,7 +156,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	klog.InfoS("calling fga", "object", object, "relation", relation)
 
 	check := &openfgav1.CheckRequest{
-		StoreId: info.Spec.FGA.Store.Id,
+		StoreId: clusterInfo.StoreID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
 			Object:   object,
 			Relation: relation,

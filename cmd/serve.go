@@ -8,10 +8,10 @@ import (
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization/union"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/contextual"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/nonresourceattributes"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/orgs"
-	"github.com/platform-mesh/rebac-authz-webhook/pkg/restmapper"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -121,7 +121,10 @@ var serveCmd = &cobra.Command{
 		orgsClusterID := logicalcluster.From(orgsCluster)
 		klog.InfoS("found orgs cluster", "name", orgsCluster.Name, "cluster", orgsClusterID.String())
 
-		mapperProvider := restmapper.New()
+		clusterCache, err := clustercache.New(restCfg)
+		if err != nil {
+			klog.Exit(err, "failed to create cluster cache")
+		}
 
 		extraAttrClusterKey := serverCfg.Webhook.ClusterKey
 
@@ -130,7 +133,7 @@ var serveCmd = &cobra.Command{
 			union.New(
 				nonresourceattributes.New(serverCfg.Webhook.AllowedNonResourcePrefixes...),
 				orgs.New(fga, extraAttrClusterKey, orgsClusterID.String(), storeRes.Stores[0].Id),
-				contextual.New(mgr, fga, mapperProvider, extraAttrClusterKey),
+				contextual.New(fga, clusterCache, extraAttrClusterKey),
 			),
 		))
 
@@ -141,8 +144,8 @@ var serveCmd = &cobra.Command{
 			klog.Exit(err, "unable to set up ready check")
 		}
 
-		if err := mgr.Add(mapperProvider); err != nil {
-			klog.Exit(err, "unable to register rest mapper provider")
+		if err := mgr.Add(clusterCache); err != nil {
+			klog.Exit(err, "unable to register cluster cache")
 		}
 
 		klog.Info("starting manager")
