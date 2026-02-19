@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -16,8 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 
 	"github.com/kcp-dev/logicalcluster/v3"
@@ -80,9 +81,7 @@ func (c *clusterCache) Engage(ctx context.Context, name string, cl cluster.Clust
 	klog.V(5).InfoS("Engaging cluster", "clusterName", name)
 
 	var lc unstructured.Unstructured
-	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return ctx.Err() == nil
-	}, func() error {
+	err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
 		lc = unstructured.Unstructured{}
 		lc.SetGroupVersionKind(schema.GroupVersionKind{
 			Group:   "core.kcp.io",
@@ -91,12 +90,12 @@ func (c *clusterCache) Engage(ctx context.Context, name string, cl cluster.Clust
 		})
 		if err := cl.GetClient().Get(ctx, types.NamespacedName{Name: "cluster"}, &lc); err != nil {
 			klog.V(5).ErrorS(err, "Failed to get LogicalCluster, will retry", "clusterName", name)
-			return err
+			return false, nil
 		}
-		return nil
+		return true, nil
 	})
 	if err != nil {
-		klog.ErrorS(err, "Failed to get LogicalCluster after retries", "clusterName", name)
+		klog.ErrorS(err, "Failed to get LogicalCluster, context cancelled", "clusterName", name)
 		return err
 	}
 
