@@ -59,8 +59,56 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	klog.V(5).InfoS("found cluster name", "clusterName", clusterName)
 
 	if req.Spec.ResourceAttributes == nil {
-		klog.V(5).Info("request does not contain ResourceAttributes, skipping")
-		return authorization.NoOpinion()
+		if req.Spec.NonResourceAttributes == nil {
+			klog.V(5).Info("request does not contain ResourceAttributes or NonResourceAttributes, skipping")
+			return authorization.NoOpinion()
+		}
+
+		if !strings.HasPrefix(req.Spec.NonResourceAttributes.Path, "/clusters/") {
+			klog.V(5).Info("non-resource request is not cluster-scoped, skipping")
+			return authorization.NoOpinion()
+		}
+
+		accountInfoCluster, err := c.mgr.GetCluster(ctx, clusterName)
+		if err != nil {
+			klog.ErrorS(err, "failed to get cluster from manager", "clusterName", clusterName)
+			return authorization.Denied()
+		}
+
+		var info accounts1alpha1.AccountInfo
+		err = accountInfoCluster.GetClient().Get(ctx, types.NamespacedName{Name: "account"}, &info)
+		if err != nil {
+			klog.ErrorS(err, "failed to get AccountInfo from cluster", "clusterName", clusterName)
+			return authorization.Denied()
+		}
+
+		if req.Spec.User == "" {
+			klog.V(5).Info("request does not contain a user, denying")
+			return authorization.Denied()
+		}
+
+		accountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s", info.Spec.Account.OriginClusterId, info.Spec.Account.Name)
+		check := &openfgav1.CheckRequest{
+			StoreId: info.Spec.FGA.Store.Id,
+			TupleKey: &openfgav1.CheckRequestTupleKey{
+				Object:   accountObject,
+				Relation: "member",
+				User:     fmt.Sprintf("user:%s", req.Spec.User),
+			},
+		}
+
+		response, err := c.fga.Check(ctx, check)
+		if err != nil {
+			klog.ErrorS(err, "failed to perform OpenFGA check")
+			return authorization.Denied()
+		}
+
+		klog.V(5).InfoS("performed OpenFGA membership check", "allowed", response.Allowed)
+		if response.Allowed {
+			return authorization.Allowed()
+		}
+
+		return authorization.Denied()
 	}
 
 	accountInfoCluster, err := c.mgr.GetCluster(ctx, clusterName)
@@ -196,5 +244,5 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		return authorization.Allowed()
 	}
 
-	return authorization.NoOpinion()
+	return authorization.Denied()
 }
