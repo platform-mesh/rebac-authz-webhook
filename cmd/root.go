@@ -1,11 +1,7 @@
 package cmd
 
 import (
-	accountsv1alpha1 "github.com/platform-mesh/account-operator/api/v1alpha1"
-	pmconfig "github.com/platform-mesh/golang-commons/config"
-	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -29,29 +25,14 @@ var (
 		},
 	}
 
-	v          *viper.Viper
-	defaultCfg *pmconfig.CommonServiceConfig
-	serverCfg  config.Config
-	scheme     = runtime.NewScheme()
+	scheme = runtime.NewScheme()
 )
 
 func init() {
 	utilruntime.Must(kcpsdkapisv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(accountsv1alpha1.AddToScheme(scheme))
 
-	rootCmd.AddCommand(serveCmd)
-
-	var err error
-	v, defaultCfg, err = pmconfig.NewDefaultConfig(rootCmd)
-	if err != nil {
-		panic(err)
-	}
-
-	err = pmconfig.BindConfigToFlags(v, serveCmd, &serverCfg)
-	if err != nil {
-		panic(err)
-	}
+	rootCmd.AddCommand(NewServeCmd())
 
 	logsapi.AddFlags(logOpts, rootCmd.PersistentFlags())
 

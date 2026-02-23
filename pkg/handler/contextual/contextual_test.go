@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
-	"github.com/platform-mesh/account-operator/api/v1alpha1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/contextual"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -22,34 +21,20 @@ import (
 
 func TestHandler(t *testing.T) {
 	testCases := []struct {
-		name     string
-		req      authorization.Request
-		res      authorization.Response
+		name              string
+		req               authorization.Request
+		res               authorization.Response
 		mgrMocks func(mgr *mocks.Manager)
-		fgaMocks func(openfga *mocks.OpenFGAServiceClient)
-		k8sMocks func(client *mocks.Client, cluster *mocks.Cluster)
-		rmpMocks func(rmp *mocks.Provider)
+		fgaMocks          func(openfga *mocks.OpenFGAServiceClient)
+		clusterCacheMocks func(cc *mocks.ClusterCacheProvider)
 	}{
 		{
-			name: "should skip processing if no extra attrs present",
+			name: "should skip processing if clusterKey extra attrs not present",
 			req:  authorization.Request{},
 			res:  authorization.NoOpinion(),
 		},
 		{
-			name: "should skip processing if clusterKey extra attrs not present",
-			req: authorization.Request{
-				SubjectAccessReview: v1.SubjectAccessReview{
-					Spec: v1.SubjectAccessReviewSpec{
-						Extra: map[string]v1.ExtraValue{
-							"a": {"b"},
-						},
-					},
-				},
-			},
-			res: authorization.NoOpinion(),
-		},
-		{
-			name: "should skip processing if accountinfo cannot be retrieved",
+			name: "should skip processing if cluster not found in cache",
 			req: authorization.Request{
 				SubjectAccessReview: v1.SubjectAccessReview{
 					Spec: v1.SubjectAccessReviewSpec{
@@ -61,48 +46,35 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.NoOpinion(),
-			k8sMocks: func(client *mocks.Client, cluster *mocks.Cluster) {
-				client.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(assert.AnError)
-
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{}, false)
 			},
 		},
 		{
-			name: "should skip processing if restmapper cannot be retrieved",
+			name: "should skip processing if restmapper cannot resolve GVK",
 			req: authorization.Request{
 				SubjectAccessReview: v1.SubjectAccessReview{
 					Spec: v1.SubjectAccessReviewSpec{
 						Extra: map[string]v1.ExtraValue{
 							"authorization.kubernetes.io/cluster-name": {"a"},
 						},
-						ResourceAttributes: &v1.ResourceAttributes{},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "unknown.io",
+							Version:  "v1",
+							Resource: "unknowns",
+						},
 					},
 				},
 			},
 			res: authorization.NoOpinion(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									Account: v1alpha1.AccountLocation{
-										OriginClusterId: "origin",
-										Name:            "origin-account",
-									},
-								},
-							}
-							return nil
-						},
-					)
-
-			},
-			rmpMocks: func(rmp *mocks.Provider) {
-				rmp.EXPECT().Get(mock.Anything).Return(nil, false)
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 		},
 		{
@@ -124,27 +96,7 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									Account: v1alpha1.AccountLocation{
-										OriginClusterId: "origin",
-										Name:            "origin-account",
-									},
-								},
-							}
-							return nil
-						},
-					)
-
-			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -159,7 +111,12 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -175,6 +132,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "test_platform-mesh_io_test:a/test-sample", in.TupleKey.Object)
 						assert.Equal(t, "get", in.TupleKey.Relation)
 
@@ -205,26 +163,7 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									Account: v1alpha1.AccountLocation{
-										OriginClusterId: "origin",
-										Name:            "origin-account",
-									},
-								},
-							}
-							return nil
-						},
-					)
-			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -239,7 +178,12 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeNamespace,
 				)
 
-				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -263,6 +207,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "test_platform-mesh_io_test:a/test-sample", in.TupleKey.Object)
 						assert.Equal(t, "get", in.TupleKey.Relation)
 
@@ -293,26 +238,7 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									Account: v1alpha1.AccountLocation{
-										OriginClusterId: "origin",
-										Name:            "origin-account",
-									},
-								},
-							}
-							return nil
-						},
-					)
-			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -327,7 +253,12 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeNamespace,
 				)
 
-				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -343,6 +274,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "core_namespace:a/test-ns", in.TupleKey.Object)
 						assert.Equal(t, "list_test_platform-mesh_io_tests", in.TupleKey.Relation)
 
@@ -372,26 +304,7 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									Account: v1alpha1.AccountLocation{
-										OriginClusterId: "origin",
-										Name:            "origin-account",
-									},
-								},
-							}
-							return nil
-						},
-					)
-			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 
 				gv := schema.GroupVersion{
@@ -406,7 +319,12 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -422,6 +340,7 @@ func TestHandler(t *testing.T) {
 
 						assert.True(t, contains)
 
+						assert.Equal(t, "store-id", in.StoreId)
 						assert.Equal(t, "core_platform-mesh_io_account:origin/origin-account", in.TupleKey.Object)
 						assert.Equal(t, "list_test_platform-mesh_io_tests", in.TupleKey.Relation)
 
@@ -574,11 +493,9 @@ func TestHandler(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 
-			mgr := mocks.NewManager(t)
-			cluster := mocks.NewCluster(t)
-			client := mocks.NewClient(t)
-			if test.k8sMocks != nil {
-				test.k8sMocks(client, cluster)
+			cc := mocks.NewClusterCacheProvider(t)
+			if test.clusterCacheMocks != nil {
+				test.clusterCacheMocks(cc)
 			}
 
 			rmp := mocks.NewProvider(t)
@@ -598,7 +515,7 @@ func TestHandler(t *testing.T) {
 				test.fgaMocks(openfga)
 			}
 
-			h := contextual.New(mgr, openfga, rmp, "authorization.kubernetes.io/cluster-name")
+			h := contextual.New(openfga, cc, "authorization.kubernetes.io/cluster-name")
 
 			ctx := t.Context()
 
