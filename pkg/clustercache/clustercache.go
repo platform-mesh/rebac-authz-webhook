@@ -122,12 +122,19 @@ func (c *clusterCache) Engage(ctx context.Context, name string, cl cluster.Clust
 	}
 
 	var store unstructured.Unstructured
-	store.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "core.platform-mesh.io",
-		Version: "v1alpha1",
-		Kind:    "Store",
+	err = wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
+		store = unstructured.Unstructured{}
+		store.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "core.platform-mesh.io",
+			Version: "v1alpha1",
+			Kind:    "Store",
+		})
+		if err := c.orgsClient.Get(ctx, types.NamespacedName{Name: orgName}, &store); err != nil {
+			klog.V(5).ErrorS(err, "Failed to get Store for org, will retry", "clusterName", name, "orgName", orgName)
+			return false, nil
+		}
+		return true, nil
 	})
-	err = c.orgsClient.Get(ctx, types.NamespacedName{Name: orgName}, &store)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get Store for org", "clusterName", name, "orgName", orgName)
 		return err
