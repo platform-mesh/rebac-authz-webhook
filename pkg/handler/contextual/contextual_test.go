@@ -420,7 +420,7 @@ func TestHandler(t *testing.T) {
 					func(ctx context.Context, in *openfgav1.CheckRequest, opts ...grpc.CallOption) (*openfgav1.CheckResponse, error) {
 						assert.Equal(t, "store", in.StoreId)
 						assert.Equal(t, "core_platform-mesh_io_account:origin/origin-account", in.TupleKey.Object)
-						assert.Equal(t, "member", in.TupleKey.Relation)
+						assert.Equal(t, "get", in.TupleKey.Relation)
 						assert.Equal(t, "user:alice", in.TupleKey.User)
 						return &openfgav1.CheckResponse{Allowed: true}, nil
 					},

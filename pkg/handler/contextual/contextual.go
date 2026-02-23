@@ -74,12 +74,17 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 			return authorization.Denied()
 		}
 
+		relation := req.Spec.NonResourceAttributes.Verb
+		if relation == "" {
+			relation = "get"
+		}
+
 		accountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s", clusterInfo.ParentClusterID, clusterInfo.AccountName)
 		check := &openfgav1.CheckRequest{
 			StoreId: clusterInfo.StoreID,
 			TupleKey: &openfgav1.CheckRequestTupleKey{
 				Object:   accountObject,
-				Relation: "member",
+				Relation: relation,
 				User:     fmt.Sprintf("user:%s", req.Spec.User),
 			},
 		}
