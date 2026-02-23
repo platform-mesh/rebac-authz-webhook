@@ -63,16 +63,9 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 			return authorization.NoOpinion()
 		}
 
-		accountInfoCluster, err := c.mgr.GetCluster(ctx, clusterName)
-		if err != nil {
-			klog.ErrorS(err, "failed to get cluster from manager", "clusterName", clusterName)
-			return authorization.Denied()
-		}
-
-		var info accounts1alpha1.AccountInfo
-		err = accountInfoCluster.GetClient().Get(ctx, types.NamespacedName{Name: "account"}, &info)
-		if err != nil {
-			klog.ErrorS(err, "failed to get AccountInfo from cluster", "clusterName", clusterName)
+		clusterInfo, ok := c.clusterCache.Get(clusterName)
+		if !ok {
+			klog.V(5).InfoS("cluster not found in cache, denying", "clusterName", clusterName)
 			return authorization.Denied()
 		}
 
@@ -81,9 +74,9 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 			return authorization.Denied()
 		}
 
-		accountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s", info.Spec.Account.OriginClusterId, info.Spec.Account.Name)
+		accountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s", clusterInfo.ParentClusterID, clusterInfo.AccountName)
 		check := &openfgav1.CheckRequest{
-			StoreId: info.Spec.FGA.Store.Id,
+			StoreId: clusterInfo.StoreID,
 			TupleKey: &openfgav1.CheckRequestTupleKey{
 				Object:   accountObject,
 				Relation: "member",

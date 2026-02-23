@@ -24,7 +24,6 @@ func TestHandler(t *testing.T) {
 		name              string
 		req               authorization.Request
 		res               authorization.Response
-		mgrMocks func(mgr *mocks.Manager)
 		fgaMocks          func(openfga *mocks.OpenFGAServiceClient)
 		clusterCacheMocks func(cc *mocks.ClusterCacheProvider)
 	}{
@@ -370,26 +369,26 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Denied(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									Account: v1alpha1.AccountLocation{OriginClusterId: "origin", Name: "origin-account"},
-								},
-							}
-							return nil
-						},
-					)
-			},
-			rmpMocks: func(rmp *mocks.Provider) {
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
-				gv := schema.GroupVersion{Group: "test.platform-mesh.io", Version: "v1alpha1"}
-				rm.AddSpecific(gv.WithKind("Test"), gv.WithResource("tests"), gv.WithResource("test"), meta.RESTScopeRoot)
-				rmp.EXPECT().Get(mock.Anything).Return(rm, true)
+
+				gv := schema.GroupVersion{
+					Group:   "test.platform-mesh.io",
+					Version: "v1alpha1",
+				}
+				rm.AddSpecific(
+					gv.WithKind("Test"),
+					gv.WithResource("tests"),
+					gv.WithResource("test"),
+					meta.RESTScopeRoot,
+				)
+
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).Return(&openfgav1.CheckResponse{Allowed: false}, nil)
@@ -409,21 +408,12 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Allowed(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									FGA:     v1alpha1.FGAInfo{Store: v1alpha1.StoreInfo{Id: "store"}},
-									Account: v1alpha1.AccountLocation{OriginClusterId: "origin", Name: "origin-account"},
-								},
-							}
-							return nil
-						},
-					)
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store",
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
@@ -451,21 +441,12 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Denied(),
-			k8sMocks: func(cl *mocks.Client, cluster *mocks.Cluster) {
-				cl.EXPECT().
-					Get(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					RunAndReturn(
-						func(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-							acc := obj.(*v1alpha1.AccountInfo)
-							*acc = v1alpha1.AccountInfo{
-								Spec: v1alpha1.AccountInfoSpec{
-									FGA:     v1alpha1.FGAInfo{Store: v1alpha1.StoreInfo{Id: "store"}},
-									Account: v1alpha1.AccountLocation{OriginClusterId: "origin", Name: "origin-account"},
-								},
-							}
-							return nil
-						},
-					)
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store",
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
 			},
 			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
 				openfga.EXPECT().Check(mock.Anything, mock.Anything).Return(&openfgav1.CheckResponse{Allowed: false}, nil)
@@ -485,8 +466,8 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.Denied(),
-			mgrMocks: func(mgr *mocks.Manager) {
-				mgr.EXPECT().GetCluster(mock.Anything, "a").Return(nil, assert.AnError)
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{}, false)
 			},
 		},
 	}
@@ -497,18 +478,6 @@ func TestHandler(t *testing.T) {
 			if test.clusterCacheMocks != nil {
 				test.clusterCacheMocks(cc)
 			}
-
-			rmp := mocks.NewProvider(t)
-			if test.rmpMocks != nil {
-				test.rmpMocks(rmp)
-			}
-
-			if test.mgrMocks != nil {
-				test.mgrMocks(mgr)
-			} else {
-				mgr.EXPECT().GetCluster(mock.Anything, mock.Anything).Return(cluster, nil).Maybe()
-			}
-			cluster.EXPECT().GetClient().Return(client).Maybe()
 
 			openfga := mocks.NewOpenFGAServiceClient(t)
 			if test.fgaMocks != nil {
