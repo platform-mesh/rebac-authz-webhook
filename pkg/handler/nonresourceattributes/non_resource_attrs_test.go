@@ -62,6 +62,22 @@ func TestHandler(t *testing.T) {
 			res: authorization.Allowed(),
 		},
 		{
+			name: "should defer cluster-scoped path even if it matches allowed prefix",
+			allowedPathPrefixes: []string{
+				"/api",
+			},
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						NonResourceAttributes: &v1.NonResourceAttributes{
+							Path: "/clusters/root:orgs:tom/api",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+		},
+		{
 			name: "should Abort if path does not match allowed prefix",
 			allowedPathPrefixes: []string{
 				"/api",

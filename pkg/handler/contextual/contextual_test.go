@@ -350,6 +350,126 @@ func TestHandler(t *testing.T) {
 				)
 			},
 		},
+		{
+			name: "should explicitly deny when OpenFGA returns allowed=false",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "test.platform-mesh.io",
+							Version:  "v1alpha1",
+							Resource: "tests",
+							Verb:     "get",
+							Name:     "test-sample",
+						},
+					},
+				},
+			},
+			res: authorization.Denied(),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+
+				gv := schema.GroupVersion{
+					Group:   "test.platform-mesh.io",
+					Version: "v1alpha1",
+				}
+				rm.AddSpecific(
+					gv.WithKind("Test"),
+					gv.WithResource("tests"),
+					gv.WithResource("test"),
+					meta.RESTScopeRoot,
+				)
+
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).Return(&openfgav1.CheckResponse{Allowed: false}, nil)
+			},
+		},
+		{
+			name: "should allow cluster-scoped non-resource request when member",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "alice",
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						NonResourceAttributes: &v1.NonResourceAttributes{Path: "/clusters/a/api"},
+					},
+				},
+			},
+			res: authorization.Allowed(),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store",
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
+					func(ctx context.Context, in *openfgav1.CheckRequest, opts ...grpc.CallOption) (*openfgav1.CheckResponse, error) {
+						assert.Equal(t, "store", in.StoreId)
+						assert.Equal(t, "core_platform-mesh_io_account:origin/origin-account", in.TupleKey.Object)
+						assert.Equal(t, "get", in.TupleKey.Relation)
+						assert.Equal(t, "user:alice", in.TupleKey.User)
+						return &openfgav1.CheckResponse{Allowed: true}, nil
+					},
+				)
+			},
+		},
+		{
+			name: "should deny cluster-scoped non-resource request when not a member",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "alice",
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						NonResourceAttributes: &v1.NonResourceAttributes{Path: "/clusters/a/api"},
+					},
+				},
+			},
+			res: authorization.Denied(),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store",
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).Return(&openfgav1.CheckResponse{Allowed: false}, nil)
+			},
+		},
+		{
+			name: "should deny cluster-scoped non-resource request when cluster is unknown",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "alice",
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						NonResourceAttributes: &v1.NonResourceAttributes{Path: "/clusters/a/api"},
+					},
+				},
+			},
+			res: authorization.Denied(),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{}, false)
+			},
+		},
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
