@@ -37,7 +37,7 @@ func (c *count) expired(ttl time.Duration) bool {
 	return time.Since(c.t) > ttl
 }
 
-// NewExpiringRetryTracker returns a Tracker that tracks of to max
+// NewExpiringRetryTracker returns a Tracker that tracks up to max
 // per key, resetting the count when no count has occurred for ttl.
 func NewExpiringRetryTracker(max uint, ttl time.Duration) *ExpiringRetryTracker {
 	return &ExpiringRetryTracker{
