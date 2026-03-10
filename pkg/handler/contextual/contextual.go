@@ -61,7 +61,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	}
 
 	clusterInfo, ok := c.clusterCache.Get(clusterName)
-	if !ok || c.cacheMissTracker.ShouldRetry(clusterName) {
+	if !ok {
 		if c.cacheMissTracker.ShouldRetry(clusterName) {
 			klog.V(5).InfoS("cluster not found in cache, retrying", "clusterName", clusterName)
 			c.cacheMissTracker.Retried(clusterName)
