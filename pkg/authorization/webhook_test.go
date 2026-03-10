@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/stretchr/testify/assert"
@@ -113,6 +114,34 @@ func TestServeHTTP(t *testing.T) {
 
 				assert.True(t, sar.Status.Allowed)
 				assert.Equal(t, types.UID("1234"), sar.UID)
+			},
+		},
+		{
+			name: "should set Retry-After header and 503 when handler returns Retry",
+			req: func() *http.Request {
+				var buffer bytes.Buffer
+				sar := v1.SubjectAccessReview{
+					ObjectMeta: metav1.ObjectMeta{
+						UID: "1234",
+					},
+				}
+				err := json.NewEncoder(&buffer).Encode(sar)
+				assert.NoError(t, err)
+
+				req := httptest.NewRequest(http.MethodPost, "/authorize", &buffer)
+				req.Header.Set("Content-Type", "application/json")
+				return req
+			},
+			handler: authorization.HandlerFunc(func(ctx context.Context, r authorization.Request) authorization.Response {
+				return authorization.Retry(5 * time.Second)
+			}),
+			responseAssertions: func(t *testing.T, res *http.Response) {
+				assert.Equal(t, 503, res.StatusCode)
+				assert.Equal(t, "5", res.Header.Get("Retry-After"))
+
+				var sar v1.SubjectAccessReview
+				err := json.NewDecoder(res.Body).Decode(&sar)
+				assert.Error(t, err, "response body should not contain a SubjectAccessReview when Retry is returned")
 			},
 		},
 	}
