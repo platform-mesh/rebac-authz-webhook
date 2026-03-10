@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCountingTracker_ShouldRetry_AllowsRetriesUnderMax(t *testing.T) {
@@ -12,23 +14,17 @@ func TestCountingTracker_ShouldRetry_AllowsRetriesUnderMax(t *testing.T) {
 	key := "test-key"
 
 	for i := 0; i < 3; i++ {
-		if !tracker.ShouldRetry(key) {
-			t.Errorf("ShouldRetry(key) = false at retry %d, want true", i)
-		}
+		assert.Truef(t, tracker.ShouldRetry(key), "Should return true the first three times")
 		tracker.Retried(key)
 	}
 
-	if tracker.ShouldRetry(key) {
-		t.Error("ShouldRetry(key) = true after max retries, want false")
-	}
+	assert.False(t, tracker.ShouldRetry(key), "Should return false after max retries")
 }
 
 func TestCountingTracker_ShouldRetry_ReturnsTrueForNewKey(t *testing.T) {
 	tracker := NewExpiringRetryTracker(1, time.Hour)
 
-	if !tracker.ShouldRetry("new-key") {
-		t.Error("ShouldRetry(new-key) = false, want true")
-	}
+	assert.True(t, tracker.ShouldRetry("new-key"), "ShouldRetry(new-key)")
 }
 
 func TestCountingTracker_KeysTrackedIndependently(t *testing.T) {
@@ -37,41 +33,29 @@ func TestCountingTracker_KeysTrackedIndependently(t *testing.T) {
 	tracker.Retried("key-a")
 	tracker.Retried("key-b")
 
-	if tracker.ShouldRetry("key-a") {
-		t.Error("ShouldRetry(key-a) = true after max, want false")
-	}
-	if tracker.ShouldRetry("key-b") {
-		t.Error("ShouldRetry(key-b) = true after max, want false")
-	}
-	if !tracker.ShouldRetry("key-c") {
-		t.Error("ShouldRetry(key-c) = false for new key, want true")
-	}
+	assert.False(t, tracker.ShouldRetry("key-a"))
+	assert.False(t, tracker.ShouldRetry("key-b"))
+	assert.True(t, tracker.ShouldRetry("key-c"))
 }
 
 func TestCountingTracker_CountResetsAfterTTL(t *testing.T) {
-	ttl := 50 * time.Millisecond
+	ttl := 500 * time.Millisecond
 	tracker := NewExpiringRetryTracker(2, ttl)
-	key := "ttl-key"
+	key := "key"
 
+	// Returns false within TTL
 	tracker.Retried(key)
 	tracker.Retried(key)
-	if tracker.ShouldRetry(key) {
-		t.Error("ShouldRetry(key) = true at max, want false")
-	}
+	assert.False(t, tracker.ShouldRetry(key))
 
-	time.Sleep(ttl + 10*time.Millisecond)
+	time.Sleep(ttl + 100*time.Millisecond)
 
-	if !tracker.ShouldRetry(key) {
-		t.Error("ShouldRetry(key) = false after TTL, want true")
-	}
+	// Reset after TTL
+	assert.True(t, tracker.ShouldRetry(key))
 	tracker.Retried(key)
-	if !tracker.ShouldRetry(key) {
-		t.Error("ShouldRetry(key) = false after one retry post-reset, want true")
-	}
+	assert.True(t, tracker.ShouldRetry(key))
 	tracker.Retried(key)
-	if tracker.ShouldRetry(key) {
-		t.Error("ShouldRetry(key) = true at max after reset, want false")
-	}
+	assert.False(t, tracker.ShouldRetry(key))
 }
 
 func TestCountingTracker_ConcurrentAccess(t *testing.T) {
@@ -92,19 +76,7 @@ func TestCountingTracker_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	for i := 0; i < 5; i++ {
-		if tracker.ShouldRetry(i) {
-			t.Errorf("ShouldRetry(%d) = true after 10 retries with max 10, want false", i)
-		}
-	}
-}
-
-func TestNewCountingTracker_InitializesMap(t *testing.T) {
-	tracker := NewExpiringRetryTracker(1, time.Hour)
-	if tracker == nil {
-		t.Fatal("NewCountingTracker returned nil")
-	}
-	if !tracker.ShouldRetry("any") {
-		t.Error("new tracker ShouldRetry = false, want true")
+		assert.Falsef(t, tracker.ShouldRetry(i), "ShouldRetry(%d) after 10 retries with max 10", i)
 	}
 }
 
@@ -115,9 +87,7 @@ func TestExpiringRetryTracker_PeriodicCleanup_DeletesExpiredElements(t *testing.
 	tracker.Retried("key-1")
 	tracker.Retried("key-2")
 	tracker.Retried("key-3")
-	if len(tracker.keys) != 3 {
-		t.Errorf("before expiry: len(keys) = %d, want 3", len(tracker.keys))
-	}
+	assert.Len(t, tracker.keys, 3, "before expiry")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -130,7 +100,5 @@ func TestExpiringRetryTracker_PeriodicCleanup_DeletesExpiredElements(t *testing.
 	cancel()
 	<-done
 
-	if len(tracker.keys) != 0 {
-		t.Errorf("after PeriodicCleanup: len(keys) = %d, want 0 (expired elements should be deleted)", len(tracker.keys))
-	}
+	assert.Empty(t, tracker.keys, "expired elements should be deleted after PeriodicCleanup")
 }
