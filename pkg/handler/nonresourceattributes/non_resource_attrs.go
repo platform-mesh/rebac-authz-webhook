@@ -31,12 +31,33 @@ func (n *nonResourceAttributesAuthorizer) Handle(ctx context.Context, req author
 	}
 
 	attrs := req.Spec.NonResourceAttributes
+	path := attrs.Path
+
+	clusterScoped := false
+	effectivePath := path
+	if strings.HasPrefix(path, "/clusters/") {
+		clusterScoped = true
+		rest := strings.TrimPrefix(path, "/clusters/")
+		if _, after, ok := strings.Cut(rest, "/"); ok {
+			effectivePath = "/" + after
+		} else {
+			effectivePath = "/"
+		}
+	}
 
 	for _, prefix := range n.allowedPathPrefixes {
-		if strings.HasPrefix(attrs.Path, prefix) {
-			klog.V(5).Infof("request path %q matches allowed prefix %q, allowing", attrs.Path, prefix)
+		if strings.HasPrefix(effectivePath, prefix) {
+			if clusterScoped {
+				klog.V(5).Infof("cluster-scoped request path %q matches allowed prefix %q, deferring", path, prefix)
+				return authorization.NoOpinion()
+			}
+			klog.V(5).Infof("request path %q matches allowed prefix %q, allowing", path, prefix)
 			return authorization.Allowed()
 		}
+	}
+
+	if clusterScoped {
+		return authorization.NoOpinion()
 	}
 
 	return authorization.Aborted()

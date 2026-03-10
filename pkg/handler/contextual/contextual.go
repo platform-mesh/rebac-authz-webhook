@@ -53,8 +53,54 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	klog.V(5).InfoS("found cluster name", "clusterName", clusterName)
 
 	if req.Spec.ResourceAttributes == nil {
-		klog.V(5).Info("request does not contain ResourceAttributes, skipping")
-		return authorization.NoOpinion()
+		if req.Spec.NonResourceAttributes == nil {
+			klog.V(5).Info("request does not contain ResourceAttributes or NonResourceAttributes, skipping")
+			return authorization.NoOpinion()
+		}
+
+		if !strings.HasPrefix(req.Spec.NonResourceAttributes.Path, "/clusters/") {
+			klog.V(5).Info("non-resource request is not cluster-scoped, skipping")
+			return authorization.NoOpinion()
+		}
+
+		clusterInfo, ok := c.clusterCache.Get(clusterName)
+		if !ok {
+			klog.V(5).InfoS("cluster not found in cache, denying", "clusterName", clusterName)
+			return authorization.Denied()
+		}
+
+		if req.Spec.User == "" {
+			klog.V(5).Info("request does not contain a user, denying")
+			return authorization.Denied()
+		}
+
+		relation := req.Spec.NonResourceAttributes.Verb
+		if relation == "" {
+			relation = "get"
+		}
+
+		accountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s", clusterInfo.ParentClusterID, clusterInfo.AccountName)
+		check := &openfgav1.CheckRequest{
+			StoreId: clusterInfo.StoreID,
+			TupleKey: &openfgav1.CheckRequestTupleKey{
+				Object:   accountObject,
+				Relation: relation,
+				User:     fmt.Sprintf("user:%s", req.Spec.User),
+			},
+		}
+
+		response, err := c.fga.Check(ctx, check)
+		if err != nil {
+			klog.ErrorS(err, "failed to perform OpenFGA check")
+			return authorization.Denied()
+		}
+
+		klog.V(5).InfoS("performed OpenFGA membership check", "allowed", response.Allowed)
+		if response.Allowed {
+			return authorization.Allowed()
+		}
+
+		return authorization.Denied()
 	}
 
 	clusterInfo, ok := c.clusterCache.Get(clusterName)
@@ -182,5 +228,5 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		return authorization.Allowed()
 	}
 
-	return authorization.NoOpinion()
+	return authorization.Denied()
 }
