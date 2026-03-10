@@ -91,4 +91,22 @@ func TestUnion(t *testing.T) {
 		mAbort.AssertNumberOfCalls(t, "Handle", 1)
 		mLater.AssertNumberOfCalls(t, "Handle", 0)
 	})
+
+	t.Run("all handlers NoOpinion returns implicit NoOpinion", func(t *testing.T) {
+		m1 := &mockHandler{}
+		m2 := &mockHandler{}
+
+		m1.On("Handle", mock.Anything, mock.Anything).Return(authorization.NoOpinion()).Once()
+		m2.On("Handle", mock.Anything, mock.Anything).Return(authorization.NoOpinion()).Once()
+		h := union.New(m1, m2)
+
+		res := h.Handle(t.Context(), authorization.Request{})
+
+		assert.False(t, res.Status.Allowed)
+		assert.False(t, res.Status.Denied)
+		assert.False(t, res.Abort)
+		assert.Equal(t, "NoOpinion", res.Status.Reason)
+		m1.AssertNumberOfCalls(t, "Handle", 1)
+		m2.AssertNumberOfCalls(t, "Handle", 1)
+	})
 }
