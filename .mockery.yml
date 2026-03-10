@@ -19,6 +19,11 @@ packages:
       include-interface-regex: Provider
       filename: ClusterCacheProvider.go
       structname: ClusterCacheProvider
+  github.com/platform-mesh/rebac-authz-webhook/pkg/retry:
+    config:
+      include-interface-regex: Tracker
+      filename: tracker.go
+      structname: Tracker
   sigs.k8s.io/controller-runtime/pkg/client:
     config:
       include-interface-regex: ^Client
