@@ -137,6 +137,7 @@ func (wh *Webhook) writeResponse(w http.ResponseWriter, resp Response) {
 		w.Header().Add("Retry-After", seconds)
 		w.WriteHeader(503)
 		wh.log.V(5).Info("RetryAfter was set", "retry_after", resp.RetryAfter)
+		return
 	}
 
 	if err := json.NewEncoder(w).Encode(resp.SubjectAccessReview); err != nil {
