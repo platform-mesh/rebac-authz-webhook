@@ -136,7 +136,7 @@ func (wh *Webhook) writeResponse(w http.ResponseWriter, resp Response) {
 		seconds := strconv.Itoa(int(resp.RetryAfter.Seconds()))
 		w.Header().Add("Retry-After", seconds)
 		w.WriteHeader(503)
-		wh.log.V(5).Info("RetryAfter was set", "retry_after", resp.RetryAfter)
+		wh.log.V(5).Info("Wrote response", "retry_after", resp.RetryAfter)
 		return
 	}
 
@@ -145,7 +145,7 @@ func (wh *Webhook) writeResponse(w http.ResponseWriter, resp Response) {
 		wh.writeResponse(w, Errored(err))
 	}
 
-	wh.log.V(5).Info("wrote response", "requestID", resp.UID, "authorized", resp.Status.Allowed)
+	wh.log.V(5).Info("Wrote response", "requestID", resp.UID, "authorized", resp.Status.Allowed)
 }
 
 // unversionedSubjectAccessReview is used to decode both v1 and v1beta1 TokenReview types.
