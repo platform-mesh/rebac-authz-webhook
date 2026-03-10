@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -32,6 +33,10 @@ func (c *count) Add() {
 	c.c += 1
 }
 
+func (c *count) expired(ttl time.Duration) bool {
+	return time.Since(c.t) > ttl
+}
+
 // NewExpiringRetryTracker returns a Tracker that tracks of to max
 // per key, resetting the count when no count has occurred for ttl.
 func NewExpiringRetryTracker(max uint, ttl time.Duration) *ExpiringRetryTracker {
@@ -47,14 +52,12 @@ func NewExpiringRetryTracker(max uint, ttl time.Duration) *ExpiringRetryTracker 
 func (t *ExpiringRetryTracker) count(key any) uint {
 	c, ok := t.keys[key]
 
-	// No count
 	if !ok {
 		return 0
 	}
 
-	// Expired count
-	if time.Since(c.t) > t.ttl {
-		klog.V(5).InfoS("retry count expired, resetting", "key", key, "previousCount", c.c, "ttl", t.ttl)
+	if c.expired(t.ttl) {
+		klog.V(5).InfoS("Retry count expired, resetting", "key", key, "previousCount", c.c, "ttl", t.ttl)
 		delete(t.keys, key)
 		return 0
 	}
@@ -62,14 +65,40 @@ func (t *ExpiringRetryTracker) count(key any) uint {
 	return c.c
 }
 
+// PeriodicCleanup checks every key for expiration in a given interval. Blocks
+// until ctx is cancelled.
+func (t *ExpiringRetryTracker) PeriodicCleanup(ctx context.Context, interval time.Duration) {
+	tick := time.NewTicker(interval)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			klog.V(5).InfoS("Running periodic cleanup")
+			t.cleanup()
+		}
+	}
+}
+
+func (t *ExpiringRetryTracker) cleanup() {
+	t.m.Lock()
+	defer t.m.Unlock()
+
+	for key, count := range t.keys {
+		if count.expired(t.ttl) {
+			delete(t.keys, key)
+		}
+	}
+}
+
 // ShouldRetry reports whether the key should be retried, i.e. the maximum retries have not been reached.
 func (t *ExpiringRetryTracker) ShouldRetry(key any) bool {
 	t.m.Lock()
 	defer t.m.Unlock()
 
-	n := t.count(key)
-	should := n < t.max
-	klog.V(5).InfoS("Should retry", "key", key, "count", n, "max", t.max, "should", should)
+	c := t.count(key)
+	should := c < t.max
+	klog.V(5).InfoS("Should retry", "key", key, "count", c, "max", t.max, "should", should)
 
 	return should
 }
@@ -86,7 +115,7 @@ func (t *ExpiringRetryTracker) Retried(key any) {
 	}
 	t.keys[key].Add()
 
-	klog.V(5).InfoS("recorded retry", "key", key, "count", t.keys[key].c, "max", t.max)
+	klog.V(5).InfoS("Recorded retry", "key", key, "count", t.keys[key].c, "max", t.max)
 }
 
 var _ Tracker = &ExpiringRetryTracker{}

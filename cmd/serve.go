@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net/http"
 	"net/url"
-	"time"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
@@ -132,7 +131,8 @@ func NewServeCmd() *cobra.Command {
 			}
 
 			extraAttrClusterKey := serverCfg.Webhook.ClusterKey
-			cacheMissTracker := retry.NewExpiringRetryTracker(1, 5*time.Minute)
+			cacheMissTracker := retry.NewExpiringRetryTracker(serverCfg.Webhook.CacheMissMaxRetries, serverCfg.Webhook.CacheMissTTL)
+			go cacheMissTracker.PeriodicCleanup(ctx, serverCfg.Webhook.CacheMissCleanupInterval)
 
 			mgr.GetWebhookServer().Register("/authz", authorization.New(
 				klog.NewKlogr(),

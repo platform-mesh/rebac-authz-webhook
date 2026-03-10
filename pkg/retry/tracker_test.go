@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -104,5 +105,32 @@ func TestNewCountingTracker_InitializesMap(t *testing.T) {
 	}
 	if !tracker.ShouldRetry("any") {
 		t.Error("new tracker ShouldRetry = false, want true")
+	}
+}
+
+func TestExpiringRetryTracker_PeriodicCleanup_DeletesExpiredElements(t *testing.T) {
+	ttl := 30 * time.Millisecond
+	tracker := NewExpiringRetryTracker(10, ttl)
+
+	tracker.Retried("key-1")
+	tracker.Retried("key-2")
+	tracker.Retried("key-3")
+	if len(tracker.keys) != 3 {
+		t.Errorf("before expiry: len(keys) = %d, want 3", len(tracker.keys))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		tracker.PeriodicCleanup(ctx, 5*time.Millisecond)
+		close(done)
+	}()
+
+	time.Sleep(ttl * 2)
+	cancel()
+	<-done
+
+	if len(tracker.keys) != 0 {
+		t.Errorf("after PeriodicCleanup: len(keys) = %d, want 0 (expired elements should be deleted)", len(tracker.keys))
 	}
 }
