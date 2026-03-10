@@ -67,8 +67,12 @@ func Denied() Response {
 
 // Retry makes the apiserver retry the request after a given duration
 func Retry(after time.Duration) Response {
-	// note: it is important to not set a SubjectAccessReview here for the later
-	// set Retry-After header to be resprected by the apiserver.
+	// note: while setting a SubjectAccessReview won't have any effect because
+	// the webhook is implemented in a way where it will not write
+	// SubjectAccessReview to the HTTP response's body if RetryAfter is set, we
+	// are not supposed to set one anyway because its presence in the HTTP
+	// response body would take priority over the Retry-After header and render
+	// it ineffective. So don't try to set one here in any case.
 	return Response{
 		RetryAfter: after,
 	}
