@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/retry"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -18,23 +20,24 @@ import (
 const maxRelationLength = 50
 
 type contextualAuthorizer struct {
-	clusterKey   string
-	fga          openfgav1.OpenFGAServiceClient
-	clusterCache clustercache.Provider
+	clusterKey       string
+	fga              openfgav1.OpenFGAServiceClient
+	clusterCache     clustercache.Provider
+	cacheMissTracker retry.Tracker
 }
 
 var _ authorization.Handler = &contextualAuthorizer{}
 
-func New(fga openfgav1.OpenFGAServiceClient, clusterCache clustercache.Provider, clusterKey string) authorization.Handler {
+func New(fga openfgav1.OpenFGAServiceClient, clusterCache clustercache.Provider, clusterKey string, cacheMissTracker retry.Tracker) authorization.Handler {
 	return &contextualAuthorizer{
-		fga:          fga,
-		clusterKey:   clusterKey,
-		clusterCache: clusterCache,
+		fga:              fga,
+		clusterKey:       clusterKey,
+		clusterCache:     clusterCache,
+		cacheMissTracker: cacheMissTracker,
 	}
 }
 
 func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Request) authorization.Response {
-
 	klog.V(5).Info("handling request in ContextualAuthorizer")
 
 	if req.Spec.Extra == nil {
@@ -58,8 +61,14 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	}
 
 	clusterInfo, ok := c.clusterCache.Get(clusterName)
-	if !ok {
-		klog.V(5).InfoS("cluster not found in cache, skipping", "clusterName", clusterName)
+	if !ok || c.cacheMissTracker.ShouldRetry(clusterName) {
+		if c.cacheMissTracker.ShouldRetry(clusterName) {
+			klog.V(5).InfoS("cluster not found in cache, retrying", "clusterName", clusterName)
+			c.cacheMissTracker.Retried(clusterName)
+			return authorization.Retry(time.Second)
+		}
+
+		klog.V(5).InfoS("cluster not found in cache", "clusterName", clusterName)
 		return authorization.NoOpinion()
 	}
 

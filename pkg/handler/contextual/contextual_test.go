@@ -4,12 +4,14 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/contextual"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/retry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
@@ -364,7 +366,8 @@ func TestHandler(t *testing.T) {
 				test.fgaMocks(openfga)
 			}
 
-			h := contextual.New(openfga, cc, "authorization.kubernetes.io/cluster-name")
+			tracker := retry.NewExpiringRetryTracker(1, time.Minute)
+			h := contextual.New(openfga, cc, "authorization.kubernetes.io/cluster-name", tracker)
 
 			ctx := t.Context()
 
