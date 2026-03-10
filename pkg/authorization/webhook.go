@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 
@@ -71,7 +73,8 @@ type Request struct {
 // operation is allowed.
 type Response struct {
 	authorizationv1.SubjectAccessReview
-	Abort bool `json:"-"`
+	Abort      bool          `json:"-"`
+	RetryAfter time.Duration `json:"-"`
 }
 
 // ServeHTTP implements http.Handler.
@@ -125,11 +128,17 @@ func (wh *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	res := wh.Handler.Handle(ctx, req)
 	res.UID = req.UID
-
 	wh.writeResponse(w, res)
 }
 
-func (wh *Webhook) writeResponse(w io.Writer, resp Response) {
+func (wh *Webhook) writeResponse(w http.ResponseWriter, resp Response) {
+	if resp.RetryAfter != 0 {
+		seconds := strconv.Itoa(int(resp.RetryAfter.Seconds()))
+		w.Header().Add("Retry-After", seconds)
+		w.WriteHeader(503)
+		wh.log.V(5).Info("RetryAfter was set", "retry_after", resp.RetryAfter)
+	}
+
 	if err := json.NewEncoder(w).Encode(resp.SubjectAccessReview); err != nil {
 		wh.log.Error(err, "unable to encode the response")
 		wh.writeResponse(w, Errored(err))

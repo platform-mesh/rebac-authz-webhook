@@ -1,6 +1,8 @@
 package authorization
 
 import (
+	"time"
+
 	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
@@ -60,5 +62,14 @@ func Denied() Response {
 				Denied:  true,
 			},
 		},
+	}
+}
+
+// Retry makes the apiserver retry the request after a given duration
+func Retry(after time.Duration) Response {
+	// note: it is important to not set a SubjectAccessReview here for the later
+	// set Retry-After header to be resprected by the apiserver.
+	return Response{
+		RetryAfter: after,
 	}
 }
