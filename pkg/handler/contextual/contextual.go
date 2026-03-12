@@ -47,8 +47,9 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	attrs := req.Spec.ResourceAttributes
 
-	// Handle bind verb for kcp separately, it requires 
-	if attrs != nil && attrs.Verb == "bind" && attrs.Group == "kcp.io"{
+	// Handle bind verb for kcp separately
+	// it requires consumer and provider cluster info
+	if attrs != nil && attrs.Verb == "bind" && strings.HasSuffix(attrs.Group,"kcp.io") {
 		return c.handleBindAuthorization(ctx, req)
 	}
 
