@@ -65,7 +65,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	// Handle bind verb for kcp separately
 	// it requires consumer and provider cluster info
 	if attrs != nil && attrs.Verb == "bind" && strings.HasSuffix(attrs.Group, "kcp.io") {
-		return c.handleBindAuthorization(ctx, req)
+		return c.handleKCPBindCheck(ctx, req)
 	}
 
 	clusterInfo, ok := c.clusterCache.Get(clusterName)
@@ -194,7 +194,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	return authorization.NoOpinion()
 }
 
-func (c *contextualAuthorizer) handleBindAuthorization(ctx context.Context, req authorization.Request) authorization.Response {
+func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req authorization.Request) authorization.Response {
 	attrs := req.Spec.ResourceAttributes
 	if attrs == nil {
 		klog.V(5).Info("bind request does not contain ResourceAttributes, skipping")
@@ -248,7 +248,7 @@ func (c *contextualAuthorizer) handleBindAuthorization(ctx context.Context, req 
 
 	resourceObjectType := fmt.Sprintf("%s_%s", group, singular)
 
-	resourceUser := fmt.Sprintf("%s:%s/%s", resourceObjectType, providerClusterID, attrs.Name)
+	resourceToBind := fmt.Sprintf("%s:%s/%s", resourceObjectType, providerClusterID, attrs.Name)
 	consumerAccountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s",
 		consumerInfo.ParentClusterID,
 		consumerInfo.AccountName)
@@ -258,7 +258,7 @@ func (c *contextualAuthorizer) handleBindAuthorization(ctx context.Context, req 
 		TupleKey: &openfgav1.CheckRequestTupleKey{
 			Object:   consumerAccountObject,
 			Relation: attrs.Verb,
-			User:     resourceUser,
+			User:     resourceToBind,
 		},
 	}
 
