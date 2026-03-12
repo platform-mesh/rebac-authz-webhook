@@ -47,15 +47,9 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	attrs := req.Spec.ResourceAttributes
 
-	// Handle bind verb for kcp separately
-	// it requires consumer and provider cluster info
-	if attrs != nil && attrs.Verb == "bind" && strings.HasSuffix(attrs.Group,"kcp.io") {
-		return c.handleBindAuthorization(ctx, req)
-	}
-
 	cn, ok := req.Spec.Extra[c.clusterKey]
 	if !ok || len(cn) == 0 {
-		klog.InfoS("ContextualAuthorizer: clusterKey not found in Extra, returning NoOpinion", "user", req.Spec.User, "clusterKey", c.clusterKey, "extraKeys", fmt.Sprintf("%v", req.Spec.Extra))
+		klog.V(5).Infof("request does not contain expected Extra attribute %q, skipping", c.clusterKey)
 		return authorization.NoOpinion()
 	}
 
@@ -66,6 +60,12 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	if req.Spec.ResourceAttributes == nil {
 		klog.V(5).Info("request does not contain ResourceAttributes, skipping")
 		return authorization.NoOpinion()
+	}
+
+	// Handle bind verb for kcp separately
+	// it requires consumer and provider cluster info
+	if attrs != nil && attrs.Verb == "bind" && strings.HasSuffix(attrs.Group, "kcp.io") {
+		return c.handleBindAuthorization(ctx, req)
 	}
 
 	clusterInfo, ok := c.clusterCache.Get(clusterName)
