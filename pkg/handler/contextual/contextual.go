@@ -20,20 +20,22 @@ import (
 const maxRelationLength = 50
 
 type contextualAuthorizer struct {
-	clusterKey       string
-	fga              openfgav1.OpenFGAServiceClient
-	clusterCache     clustercache.Provider
-	cacheMissTracker retry.Tracker
+	clusterKey          string
+	fga                 openfgav1.OpenFGAServiceClient
+	clusterCache        clustercache.Provider
+	cacheMissTracker    retry.Tracker
+	cacheMissRetryAfter time.Duration
 }
 
 var _ authorization.Handler = &contextualAuthorizer{}
 
-func New(fga openfgav1.OpenFGAServiceClient, clusterCache clustercache.Provider, clusterKey string, cacheMissTracker retry.Tracker) authorization.Handler {
+func New(fga openfgav1.OpenFGAServiceClient, clusterCache clustercache.Provider, clusterKey string, cacheMissTracker retry.Tracker, cacheMissRetryAfter time.Duration) authorization.Handler {
 	return &contextualAuthorizer{
-		fga:              fga,
-		clusterKey:       clusterKey,
-		clusterCache:     clusterCache,
-		cacheMissTracker: cacheMissTracker,
+		fga:                 fga,
+		clusterKey:          clusterKey,
+		clusterCache:        clusterCache,
+		cacheMissTracker:    cacheMissTracker,
+		cacheMissRetryAfter: cacheMissRetryAfter,
 	}
 }
 
@@ -65,7 +67,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		if c.cacheMissTracker.ShouldRetry(clusterName) {
 			klog.V(5).InfoS("cluster not found in cache, retrying", "clusterName", clusterName)
 			c.cacheMissTracker.Retried(clusterName)
-			return authorization.Retry(time.Second)
+			return authorization.Retry(c.cacheMissRetryAfter)
 		}
 
 		klog.V(5).InfoS("cluster not found in cache", "clusterName", clusterName)

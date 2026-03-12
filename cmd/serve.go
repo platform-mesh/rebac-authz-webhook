@@ -139,7 +139,7 @@ func NewServeCmd() *cobra.Command {
 				union.New(
 					nonresourceattributes.New(serverCfg.Webhook.AllowedNonResourcePrefixes...),
 					orgs.New(fga, extraAttrClusterKey, orgsClusterID.String(), storeRes.Stores[0].Id),
-					contextual.New(fga, clusterCache, extraAttrClusterKey, cacheMissTracker),
+					contextual.New(fga, clusterCache, extraAttrClusterKey, cacheMissTracker, serverCfg.Webhook.CacheMissRetryAfter),
 				),
 			))
 

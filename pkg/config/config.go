@@ -17,6 +17,8 @@ type WebhookConfig struct {
 	CacheMissTTL time.Duration
 	// CacheMissCleanupInterval is the interval at which keys are checked for expiration.
 	CacheMissCleanupInterval time.Duration
+	// CacheMissRetryAfter is the delay before retrying on cache miss.
+	CacheMissRetryAfter time.Duration
 }
 
 type Config struct {
@@ -41,6 +43,7 @@ func New() *Config {
 			CacheMissMaxRetries:        1,
 			CacheMissTTL:               5 * time.Minute,
 			CacheMissCleanupInterval:   2 * time.Minute,
+			CacheMissRetryAfter:        1 * time.Second,
 		},
 
 		APIExportEndpointSliceName: "core.platform-mesh.io",
@@ -57,5 +60,6 @@ func (cfg *Config) AddFlags(fs *pflag.FlagSet) {
 	fs.UintVar(&cfg.Webhook.CacheMissMaxRetries, "webhook-cache-miss-max-retries", cfg.Webhook.CacheMissMaxRetries, "Maximum number of retries per cluster on cache miss")
 	fs.DurationVar(&cfg.Webhook.CacheMissTTL, "webhook-cache-miss-ttl", cfg.Webhook.CacheMissTTL, "Duration after which cache miss count resets for a cluster")
 	fs.DurationVar(&cfg.Webhook.CacheMissCleanupInterval, "webhook-cache-miss-cleanup-interval", cfg.Webhook.CacheMissCleanupInterval, "Interval at which cache miss keys are checked for expiration")
+	fs.DurationVar(&cfg.Webhook.CacheMissRetryAfter, "webhook-cache-miss-retry-after", cfg.Webhook.CacheMissRetryAfter, "Delay before retrying on cache miss")
 	fs.StringVar(&cfg.APIExportEndpointSliceName, "kcp-api-export-endpoint-slice-name", cfg.APIExportEndpointSliceName, "Set the KCP API export endpoint slice name")
 }
