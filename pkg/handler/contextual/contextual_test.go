@@ -395,7 +395,7 @@ func TestHandler(t *testing.T) {
 				cacheMissTracker.EXPECT().ShouldRetry(mock.Anything).Return(false).Maybe()
 			}
 
-			h := contextual.New(openfga, cc, "authorization.kubernetes.io/cluster-name", cacheMissTracker)
+			h := contextual.New(openfga, cc, "authorization.kubernetes.io/cluster-name", cacheMissTracker, time.Second)
 
 			ctx := t.Context()
 
