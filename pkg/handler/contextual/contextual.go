@@ -18,6 +18,7 @@ import (
 const (
 	maxRelationLength   = 50
 	systemClusterPrefix = "system:cluster:"
+	bindVerb            = "bind"
 )
 
 type contextualAuthorizer struct {
@@ -64,7 +65,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 
 	// Handle bind verb for kcp separately
 	// it requires consumer and provider cluster info
-	if attrs != nil && attrs.Verb == "bind" && strings.HasSuffix(attrs.Group, "kcp.io") {
+	if attrs.Verb == bindVerb && attrs.Group == "apis.kcp.io" {
 		return c.handleKCPBindCheck(ctx, req)
 	}
 
@@ -206,7 +207,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 		klog.InfoS("ContextualAuthorizer: bind request missing provider cluster in Extra", "clusterKey", c.clusterKey)
 		return authorization.NoOpinion()
 	}
-	providerClusterID := providerCluster[0]
+	providerClusterName := providerCluster[0]
 
 	consumerClusterID := ""
 	for _, group := range req.Spec.Groups {
@@ -248,7 +249,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 
 	resourceObjectType := fmt.Sprintf("%s_%s", group, singular)
 
-	resourceToBind := fmt.Sprintf("%s:%s/%s", resourceObjectType, providerClusterID, attrs.Name)
+	resourceToBind := fmt.Sprintf("%s:%s/%s", resourceObjectType, providerClusterName, attrs.Name)
 	consumerAccountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s",
 		consumerInfo.ParentClusterID,
 		consumerInfo.AccountName)
@@ -257,7 +258,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 		StoreId: consumerInfo.StoreID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
 			Object:   consumerAccountObject,
-			Relation: attrs.Verb,
+			Relation: bindVerb,
 			User:     resourceToBind,
 		},
 	}
