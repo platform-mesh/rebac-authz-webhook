@@ -261,6 +261,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 			User:     resourceToBind,
 		},
 	}
+	klog.InfoS("calling fga", "object", consumerAccountObject, "relation", attrs.Verb)
 
 	response, err := c.fga.Check(ctx, check)
 	if err != nil {
