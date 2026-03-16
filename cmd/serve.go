@@ -131,8 +131,7 @@ func NewServeCmd() *cobra.Command {
 			}
 
 			extraAttrClusterKey := serverCfg.Webhook.ClusterKey
-			cacheMissTracker := retry.NewExpiringRetryTracker(serverCfg.Webhook.CacheMissMaxRetries, serverCfg.Webhook.CacheMissTTL)
-			go cacheMissTracker.PeriodicCleanup(ctx, serverCfg.Webhook.CacheMissCleanupInterval)
+			cacheMissTracker := retry.NewExpiringRetryTracker[string](ctx, serverCfg.Webhook.CacheMissMaxRetries, serverCfg.Webhook.CacheMissTTL)
 
 			mgr.GetWebhookServer().Register("/authz", authorization.New(
 				klog.NewKlogr(),

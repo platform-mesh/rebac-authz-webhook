@@ -10,7 +10,7 @@ import (
 )
 
 func TestCountingTracker_ShouldRetry_AllowsRetriesUnderMax(t *testing.T) {
-	tracker := NewExpiringRetryTracker(3, time.Hour)
+	tracker := NewExpiringRetryTracker[string](context.Background(), 3, time.Hour)
 	key := "test-key"
 
 	for i := 0; i < 3; i++ {
@@ -22,13 +22,13 @@ func TestCountingTracker_ShouldRetry_AllowsRetriesUnderMax(t *testing.T) {
 }
 
 func TestCountingTracker_ShouldRetry_ReturnsTrueForNewKey(t *testing.T) {
-	tracker := NewExpiringRetryTracker(1, time.Hour)
+	tracker := NewExpiringRetryTracker[string](context.Background(), 1, time.Hour)
 
 	assert.True(t, tracker.ShouldRetry("new-key"), "ShouldRetry(new-key)")
 }
 
 func TestCountingTracker_KeysTrackedIndependently(t *testing.T) {
-	tracker := NewExpiringRetryTracker(1, time.Hour)
+	tracker := NewExpiringRetryTracker[string](context.Background(), 1, time.Hour)
 
 	tracker.Retried("key-a")
 	tracker.Retried("key-b")
@@ -40,7 +40,7 @@ func TestCountingTracker_KeysTrackedIndependently(t *testing.T) {
 
 func TestCountingTracker_CountResetsAfterTTL(t *testing.T) {
 	ttl := 500 * time.Millisecond
-	tracker := NewExpiringRetryTracker(2, ttl)
+	tracker := NewExpiringRetryTracker[string](context.Background(), 2, ttl)
 	key := "key"
 
 	// Returns false within TTL
@@ -59,7 +59,7 @@ func TestCountingTracker_CountResetsAfterTTL(t *testing.T) {
 }
 
 func TestCountingTracker_ConcurrentAccess(t *testing.T) {
-	tracker := NewExpiringRetryTracker(10, time.Hour)
+	tracker := NewExpiringRetryTracker[int](context.Background(), 10, time.Hour)
 	var wg sync.WaitGroup
 
 	for i := 0; i < 5; i++ {
@@ -80,25 +80,16 @@ func TestCountingTracker_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestExpiringRetryTracker_PeriodicCleanup_DeletesExpiredElements(t *testing.T) {
+func TestExpiringRetryTracker_AutoExpiration_DeletesExpiredElements(t *testing.T) {
 	ttl := 30 * time.Millisecond
-	tracker := NewExpiringRetryTracker(10, ttl)
+	tracker := NewExpiringRetryTracker[string](context.Background(), 10, ttl)
 
 	tracker.Retried("key-1")
 	tracker.Retried("key-2")
 	tracker.Retried("key-3")
-	assert.Len(t, tracker.keys, 3, "before expiry")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		tracker.PeriodicCleanup(ctx, 5*time.Millisecond)
-		close(done)
-	}()
+	assert.Equal(t, 3, tracker.cache.Len(), "before expiry")
 
 	time.Sleep(ttl * 2)
-	cancel()
-	<-done
 
-	assert.Empty(t, tracker.keys, "expired elements should be deleted after PeriodicCleanup")
+	assert.Equal(t, 0, tracker.cache.Len(), "expired elements should be deleted by cache auto-expiration")
 }

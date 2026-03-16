@@ -23,13 +23,13 @@ type contextualAuthorizer struct {
 	clusterKey          string
 	fga                 openfgav1.OpenFGAServiceClient
 	clusterCache        clustercache.Provider
-	cacheMissTracker    retry.Tracker
+	cacheMissTracker    retry.Tracker[string]
 	cacheMissRetryAfter time.Duration
 }
 
 var _ authorization.Handler = &contextualAuthorizer{}
 
-func New(fga openfgav1.OpenFGAServiceClient, clusterCache clustercache.Provider, clusterKey string, cacheMissTracker retry.Tracker, cacheMissRetryAfter time.Duration) authorization.Handler {
+func New(fga openfgav1.OpenFGAServiceClient, clusterCache clustercache.Provider, clusterKey string, cacheMissTracker retry.Tracker[string], cacheMissRetryAfter time.Duration) authorization.Handler {
 	return &contextualAuthorizer{
 		fga:                 fga,
 		clusterKey:          clusterKey,

@@ -27,7 +27,7 @@ func TestHandler(t *testing.T) {
 		res                   authorization.Response
 		fgaMocks              func(openfga *mocks.OpenFGAServiceClient)
 		clusterCacheMocks     func(cc *mocks.ClusterCacheProvider)
-		cacheMissTrackerMocks func(tracker *mocks.Tracker)
+		cacheMissTrackerMocks func(tracker *mocks.Tracker[string])
 	}{
 		{
 			name: "should skip processing if clusterKey extra attrs not present",
@@ -50,7 +50,7 @@ func TestHandler(t *testing.T) {
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
 				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{}, false)
 			},
-			cacheMissTrackerMocks: func(tracker *mocks.Tracker) {
+			cacheMissTrackerMocks: func(tracker *mocks.Tracker[string]) {
 				tracker.EXPECT().ShouldRetry("a").Return(true)
 				tracker.EXPECT().Retried("a")
 			},
@@ -387,7 +387,7 @@ func TestHandler(t *testing.T) {
 				test.fgaMocks(openfga)
 			}
 
-			cacheMissTracker := mocks.NewTracker(t)
+			cacheMissTracker := mocks.NewTracker[string](t)
 			if test.cacheMissTrackerMocks != nil {
 				test.cacheMissTrackerMocks(cacheMissTracker)
 			} else {

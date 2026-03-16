@@ -2,120 +2,71 @@ package retry
 
 import (
 	"context"
-	"sync"
 	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	"k8s.io/klog/v2"
 )
 
 // Tracker tracks whether something should be retried.
-type Tracker interface {
-	ShouldRetry(key any) bool
-	Retried(key any)
+type Tracker[K comparable] interface {
+	ShouldRetry(key K) bool
+	Retried(key K)
 }
 
 // ExpiringRetryTracker tracks how often something for a given key was tried and
 // stops tracking when a given maximum or TTL was reached.
-type ExpiringRetryTracker struct {
-	keys map[any]*count
-	max  uint
-	ttl  time.Duration
-
-	m sync.Mutex
+type ExpiringRetryTracker[K comparable] struct {
+	cache *ttlcache.Cache[K, *uint]
+	max   uint
 }
 
-type count struct {
-	c uint
-	t time.Time
+// NewExpiringRetryTracker returns a Tracker that tracks up to max per key,
+// resetting the count when no count has occurred for ttl. Internal cleanup is
+// stopped when ctx in cancelled.
+func NewExpiringRetryTracker[K comparable](ctx context.Context, max uint, ttl time.Duration) *ExpiringRetryTracker[K] {
+	cache := ttlcache.New[K, *uint](
+		ttlcache.WithTTL[K, *uint](ttl),
+		ttlcache.WithDisableTouchOnHit[K, *uint](),
+	)
+	go func() {
+		cache.Start()
+		<-ctx.Done()
+		cache.Stop()
+	}()
+	return &ExpiringRetryTracker[K]{cache: cache, max: max}
 }
 
-func (c *count) Add() {
-	c.c += 1
-}
-
-func (c *count) expired(ttl time.Duration) bool {
-	return time.Since(c.t) > ttl
-}
-
-// NewExpiringRetryTracker returns a Tracker that tracks up to max
-// per key, resetting the count when no count has occurred for ttl.
-func NewExpiringRetryTracker(max uint, ttl time.Duration) *ExpiringRetryTracker {
-	return &ExpiringRetryTracker{
-		keys: make(map[any]*count),
-		max:  max,
-		ttl:  ttl,
-	}
-}
-
-// count returns the current retry count for key, or 0 if the count has
-// expired. Expired entries are removed. Caller must hold t.m.
-func (t *ExpiringRetryTracker) count(key any) uint {
-	c, ok := t.keys[key]
-
-	if !ok {
+// retries returns the current retry conut for key, or 0 if the entry does not
+// exist.
+func (t *ExpiringRetryTracker[K]) retries(key K) uint {
+	item := t.cache.Get(key)
+	if item == nil {
 		return 0
 	}
 
-	if c.expired(t.ttl) {
-		klog.V(5).InfoS("Retry count expired, resetting", "key", key, "previousCount", c.c, "ttl", t.ttl)
-		delete(t.keys, key)
-		return 0
-	}
-
-	return c.c
-}
-
-// PeriodicCleanup checks every key for expiration in a given interval. Blocks
-// until ctx is cancelled.
-func (t *ExpiringRetryTracker) PeriodicCleanup(ctx context.Context, interval time.Duration) {
-	tick := time.NewTicker(interval)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-			klog.V(5).InfoS("Running periodic cleanup")
-			t.cleanup()
-		}
-	}
-}
-
-func (t *ExpiringRetryTracker) cleanup() {
-	t.m.Lock()
-	defer t.m.Unlock()
-
-	for key, count := range t.keys {
-		if count.expired(t.ttl) {
-			delete(t.keys, key)
-		}
-	}
+	return *item.Value()
 }
 
 // ShouldRetry reports whether the key should be retried, i.e. the maximum retries have not been reached.
-func (t *ExpiringRetryTracker) ShouldRetry(key any) bool {
-	t.m.Lock()
-	defer t.m.Unlock()
-
-	c := t.count(key)
+func (t *ExpiringRetryTracker[K]) ShouldRetry(key K) bool {
+	c := t.retries(key)
 	should := c < t.max
 	klog.V(5).InfoS("Should retry", "key", key, "count", c, "max", t.max, "should", should)
-
 	return should
 }
 
 // Retried records that the key was tried.
-func (t *ExpiringRetryTracker) Retried(key any) {
-	t.m.Lock()
-	defer t.m.Unlock()
-
-	now := time.Now()
-	_, ok := t.keys[key]
-	if !ok {
-		t.keys[key] = &count{t: now}
+func (t *ExpiringRetryTracker[K]) Retried(key K) {
+	item := t.cache.Get(key)
+	if item == nil {
+		u := uint(1)
+		t.cache.Set(key, &u, ttlcache.DefaultTTL)
+		klog.V(5).InfoS("Recorded retry", "key", key, "count", 1, "max", t.max)
+		return
 	}
-	t.keys[key].Add()
-
-	klog.V(5).InfoS("Recorded retry", "key", key, "count", t.keys[key].c, "max", t.max)
+	*item.Value()++
+	klog.V(5).InfoS("Recorded retry", "key", key, "count", *item.Value(), "max", t.max)
 }
 
-var _ Tracker = &ExpiringRetryTracker{}
+var _ Tracker[string] = (*ExpiringRetryTracker[string])(nil)
