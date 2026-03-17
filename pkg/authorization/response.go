@@ -1,6 +1,8 @@
 package authorization
 
 import (
+	"time"
+
 	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
@@ -60,5 +62,18 @@ func Denied() Response {
 				Denied:  true,
 			},
 		},
+	}
+}
+
+// Retry makes the apiserver retry the request after a given duration
+func Retry(after time.Duration) Response {
+	// note: while setting a SubjectAccessReview won't have any effect because
+	// the webhook is implemented in a way where it will not write
+	// SubjectAccessReview to the HTTP response's body if RetryAfter is set, we
+	// are not supposed to set one anyway because its presence in the HTTP
+	// response body would take priority over the Retry-After header and render
+	// it ineffective. So don't try to set one here in any case.
+	return Response{
+		RetryAfter: after,
 	}
 }

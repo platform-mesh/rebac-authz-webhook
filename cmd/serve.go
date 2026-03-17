@@ -13,6 +13,7 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/contextual"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/nonresourceattributes"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/orgs"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/retry"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -130,13 +131,14 @@ func NewServeCmd() *cobra.Command {
 			}
 
 			extraAttrClusterKey := serverCfg.Webhook.ClusterKey
+			cacheMissTracker := retry.NewExpiringRetryTracker[string](ctx, serverCfg.Webhook.CacheMissMaxRetries, serverCfg.Webhook.CacheMissTTL)
 
 			mgr.GetWebhookServer().Register("/authz", authorization.New(
 				klog.NewKlogr(),
 				union.New(
 					nonresourceattributes.New(serverCfg.Webhook.AllowedNonResourcePrefixes...),
 					orgs.New(fga, extraAttrClusterKey, orgsClusterID.String(), storeRes.Stores[0].Id),
-					contextual.New(fga, clusterCache, extraAttrClusterKey),
+					contextual.New(fga, clusterCache, extraAttrClusterKey, cacheMissTracker, serverCfg.Webhook.CacheMissRetryAfter),
 				),
 			))
 

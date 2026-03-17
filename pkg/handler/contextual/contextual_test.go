@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
@@ -21,11 +22,12 @@ import (
 
 func TestHandler(t *testing.T) {
 	testCases := []struct {
-		name              string
-		req               authorization.Request
-		res               authorization.Response
-		fgaMocks          func(openfga *mocks.OpenFGAServiceClient)
-		clusterCacheMocks func(cc *mocks.ClusterCacheProvider)
+		name                  string
+		req                   authorization.Request
+		res                   authorization.Response
+		fgaMocks              func(openfga *mocks.OpenFGAServiceClient)
+		clusterCacheMocks     func(cc *mocks.ClusterCacheProvider)
+		cacheMissTrackerMocks func(tracker *mocks.Tracker[string])
 	}{
 		{
 			name: "should skip processing if clusterKey extra attrs not present",
@@ -33,7 +35,28 @@ func TestHandler(t *testing.T) {
 			res:  authorization.NoOpinion(),
 		},
 		{
-			name: "should skip processing if cluster not found in cache",
+			name: "should retry processing if cluster not found in cache and cacheMissTracker returns true",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{},
+					},
+				},
+			},
+			res: authorization.Retry(time.Second),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{}, false)
+			},
+			cacheMissTrackerMocks: func(tracker *mocks.Tracker[string]) {
+				tracker.EXPECT().ShouldRetry("a").Return(true)
+				tracker.EXPECT().Retried("a")
+			},
+		},
+		{
+			name: "should skip processing if cluster not found in cache and cacheMissTracker returns false",
 			req: authorization.Request{
 				SubjectAccessReview: v1.SubjectAccessReview{
 					Spec: v1.SubjectAccessReviewSpec{
@@ -364,7 +387,15 @@ func TestHandler(t *testing.T) {
 				test.fgaMocks(openfga)
 			}
 
-			h := contextual.New(openfga, cc, "authorization.kubernetes.io/cluster-name")
+			cacheMissTracker := mocks.NewTracker[string](t)
+			if test.cacheMissTrackerMocks != nil {
+				test.cacheMissTrackerMocks(cacheMissTracker)
+			} else {
+				// Default: ShouldRetry returns false so handler proceeds when cluster is in cache
+				cacheMissTracker.EXPECT().ShouldRetry(mock.Anything).Return(false).Maybe()
+			}
+
+			h := contextual.New(openfga, cc, "authorization.kubernetes.io/cluster-name", cacheMissTracker, time.Second)
 
 			ctx := t.Context()
 
