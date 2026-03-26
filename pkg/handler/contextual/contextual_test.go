@@ -373,6 +373,202 @@ func TestHandler(t *testing.T) {
 				)
 			},
 		},
+		{
+			name: "should process bind verb authorization successfully",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "system:anonymous",
+						Groups: []string{
+							"system:authenticated",
+							"system:cluster:consumer-cluster-id",
+						},
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"provider-cluster-id"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "apis.kcp.io",
+							Version:  "v1alpha1",
+							Resource: "apiexports",
+							Verb:     "bind",
+							Name:     "test-export",
+						},
+					},
+				},
+			},
+			res: authorization.Allowed(),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				consumerRM := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+				consumerGV := schema.GroupVersion{
+					Group:   "apis.kcp.io",
+					Version: "v1alpha1",
+				}
+				consumerRM.AddSpecific(
+					consumerGV.WithKind("APIExport"),
+					consumerGV.WithResource("apiexports"),
+					consumerGV.WithResource("apiexport"),
+					meta.RESTScopeRoot,
+				)
+
+				cc.EXPECT().Get("consumer-cluster-id").Return(clustercache.ClusterInfo{
+					StoreID:         "consumer-store-id",
+					RESTMapper:      consumerRM,
+					AccountName:     "consumer-account",
+					ParentClusterID: "consumer-parent",
+				}, true)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
+					func(ctx context.Context, in *openfgav1.CheckRequest, opts ...grpc.CallOption) (*openfgav1.CheckResponse, error) {
+						assert.Equal(t, "consumer-store-id", in.StoreId)
+						assert.Equal(t, "core_platform-mesh_io_account:consumer-parent/consumer-account", in.TupleKey.Object)
+						assert.Equal(t, "bind", in.TupleKey.Relation)
+						assert.Equal(t, "apis_kcp_io_apiexport:provider-cluster-id/test-export", in.TupleKey.User)
+						assert.Nil(t, in.ContextualTuples)
+
+						return &openfgav1.CheckResponse{
+							Allowed: true,
+						}, nil
+					},
+				)
+			},
+		},
+		{
+			name: "should return no opinion if bind verb and consumer cluster not found",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "system:anonymous",
+						Groups: []string{
+							"system:authenticated",
+							"system:cluster:consumer-cluster-id",
+						},
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"provider-cluster-id"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "apis.kcp.io",
+							Version:  "v1alpha1",
+							Resource: "apiexports",
+							Verb:     "bind",
+							Name:     "test-export",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				cc.EXPECT().Get("consumer-cluster-id").Return(clustercache.ClusterInfo{}, false)
+			},
+		},
+		{
+			name: "should return no opinion if bind verb and consumer cluster not in groups",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "system:anonymous",
+						Groups: []string{
+							"system:authenticated",
+						},
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"provider-cluster-id"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "apis.kcp.io",
+							Version:  "v1alpha1",
+							Resource: "apiexports",
+							Verb:     "bind",
+							Name:     "test-export",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+		},
+		{
+			name: "should return no opinion if bind verb and provider cluster not in extra",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "system:anonymous",
+						Groups: []string{
+							"system:authenticated",
+							"system:cluster:consumer-cluster-id",
+						},
+						Extra:              map[string]v1.ExtraValue{},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "apis.kcp.io",
+							Version:  "v1alpha1",
+							Resource: "apiexports",
+							Verb:     "bind",
+							Name:     "test-export",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+		},
+		{
+			name: "should not process bind verb if group is not apis.kcp.io",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						User: "system:anonymous",
+						Groups: []string{
+							"system:authenticated",
+							"system:cluster:consumer-cluster-id",
+						},
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "other.io",
+							Version:  "v1",
+							Resource: "tests",
+							Verb:     "bind",
+							Name:     "test-sample",
+						},
+					},
+				},
+			},
+			res: authorization.Allowed(),
+			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
+				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
+
+				gv := schema.GroupVersion{
+					Group:   "other.io",
+					Version: "v1",
+				}
+
+				rm.AddSpecific(
+					gv.WithKind("Test"),
+					gv.WithResource("tests"),
+					gv.WithResource("test"),
+					meta.RESTScopeRoot,
+				)
+
+				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+					StoreID:         "store-id",
+					RESTMapper:      rm,
+					AccountName:     "origin-account",
+					ParentClusterID: "origin",
+				}, true)
+			},
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).RunAndReturn(
+					func(ctx context.Context, in *openfgav1.CheckRequest, opts ...grpc.CallOption) (*openfgav1.CheckResponse, error) {
+						// Should process as regular authorization, not bind
+						assert.Equal(t, "store-id", in.StoreId)
+						assert.Equal(t, "other_io_test:a/test-sample", in.TupleKey.Object)
+						assert.Equal(t, "bind", in.TupleKey.Relation)
+
+						return &openfgav1.CheckResponse{
+							Allowed: true,
+						}, nil
+					},
+				)
+			},
+		},
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {

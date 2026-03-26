@@ -17,7 +17,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const maxRelationLength = 50
+const (
+	maxRelationLength   = 50
+	systemClusterPrefix = "system:cluster:"
+	bindVerb            = "bind"
+)
 
 type contextualAuthorizer struct {
 	clusterKey          string
@@ -47,6 +51,8 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		return authorization.NoOpinion()
 	}
 
+	attrs := req.Spec.ResourceAttributes
+
 	cn, ok := req.Spec.Extra[c.clusterKey]
 	if !ok || len(cn) == 0 {
 		klog.V(5).Infof("request does not contain expected Extra attribute %q, skipping", c.clusterKey)
@@ -60,6 +66,12 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	if req.Spec.ResourceAttributes == nil {
 		klog.V(5).Info("request does not contain ResourceAttributes, skipping")
 		return authorization.NoOpinion()
+	}
+
+	// Handle bind verb for kcp separately
+	// it requires consumer and provider cluster info
+	if attrs.Verb == bindVerb && attrs.Group == "apis.kcp.io" {
+		return c.handleKCPBindCheck(ctx, req)
 	}
 
 	clusterInfo, ok := c.clusterCache.Get(clusterName)
@@ -79,8 +91,6 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		"storeID", clusterInfo.StoreID,
 		"accountName", clusterInfo.AccountName,
 		"parentClusterID", clusterInfo.ParentClusterID)
-
-	attrs := req.Spec.ResourceAttributes
 
 	version := attrs.Version
 	if version == "*" {
@@ -188,6 +198,90 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 	}
 
 	klog.V(5).InfoS("performed OpenFGA check", "allowed", response.Allowed)
+
+	if response.Allowed {
+		return authorization.Allowed()
+	}
+
+	return authorization.NoOpinion()
+}
+
+func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req authorization.Request) authorization.Response {
+	attrs := req.Spec.ResourceAttributes
+	if attrs == nil {
+		klog.V(5).Info("bind request does not contain ResourceAttributes, skipping")
+		return authorization.NoOpinion()
+	}
+
+	providerCluster, ok := req.Spec.Extra[c.clusterKey]
+	if !ok || len(providerCluster) == 0 {
+		klog.InfoS("ContextualAuthorizer: bind request missing provider cluster in Extra", "clusterKey", c.clusterKey)
+		return authorization.NoOpinion()
+	}
+	providerClusterName := providerCluster[0]
+
+	consumerClusterID := ""
+	for _, group := range req.Spec.Groups {
+		if strings.HasPrefix(group, systemClusterPrefix) {
+			consumerClusterID = strings.TrimPrefix(group, systemClusterPrefix)
+			break
+		}
+	}
+
+	if consumerClusterID == "" {
+		klog.InfoS("ContextualAuthorizer: bind request missing consumer cluster in Groups")
+		return authorization.NoOpinion()
+	}
+
+	consumerInfo, ok := c.clusterCache.Get(consumerClusterID)
+	if !ok {
+		klog.InfoS("ContextualAuthorizer: consumer cluster not found in cache", "clusterID", consumerClusterID)
+		return authorization.NoOpinion()
+	}
+
+	klog.V(5).InfoS("fetched consumer cluster info from cache",
+		"consumerAccount", consumerInfo.AccountName,
+		"consumerParentClusterID", consumerInfo.ParentClusterID,
+		"storeID", consumerInfo.StoreID)
+
+	singular, err := consumerInfo.RESTMapper.ResourceSingularizer(attrs.Resource)
+	if err != nil {
+		klog.ErrorS(err, "failed to singularize resource", "resource", attrs.Resource)
+		return authorization.NoOpinion()
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    attrs.Group,
+		Resource: attrs.Resource,
+	}
+
+	group := util.CapGroupToRelationLength(gvr, maxRelationLength)
+	group = strings.ReplaceAll(group, ".", "_")
+
+	resourceObjectType := fmt.Sprintf("%s_%s", group, singular)
+
+	resourceToBind := fmt.Sprintf("%s:%s/%s", resourceObjectType, providerClusterName, attrs.Name)
+	consumerAccountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s",
+		consumerInfo.ParentClusterID,
+		consumerInfo.AccountName)
+
+	check := &openfgav1.CheckRequest{
+		StoreId: consumerInfo.StoreID,
+		TupleKey: &openfgav1.CheckRequestTupleKey{
+			Object:   consumerAccountObject,
+			Relation: bindVerb,
+			User:     resourceToBind,
+		},
+	}
+	klog.InfoS("calling fga", "object", consumerAccountObject, "relation", attrs.Verb)
+
+	response, err := c.fga.Check(ctx, check)
+	if err != nil {
+		klog.ErrorS(err, "failed to perform OpenFGA check for bind")
+		return authorization.NoOpinion()
+	}
+
+	klog.InfoS("performed OpenFGA bind check", "allowed", response.Allowed)
 
 	if response.Allowed {
 		return authorization.Allowed()
