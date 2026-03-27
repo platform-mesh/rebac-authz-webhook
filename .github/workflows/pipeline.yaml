@@ -13,7 +13,7 @@ jobs:
     concurrency:
       group: ${{ github.ref }}
       cancel-in-progress: true
-    uses: platform-mesh/.github/.github/workflows/pipeline-golang-app.yml@ci/with-token-arg
+    uses: platform-mesh/.github/.github/workflows/pipeline-golang-app.yml@6fe9408e82042eca1b50ca8b065e32f769b35723 # ci/with-token-arg
     secrets: inherit
     with:
       imageTagName: ghcr.io/platform-mesh/rebac-authz-webhook
