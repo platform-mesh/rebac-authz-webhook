@@ -9,11 +9,11 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestNew(t *testing.T) {
@@ -117,8 +117,8 @@ func TestClusterCache_Engage(t *testing.T) {
 					lc := obj.(*unstructured.Unstructured)
 					lc.SetAnnotations(map[string]string{"kcp.io/path": tt.path})
 					if tt.ownerCluster != "" {
-						lc.Object["spec"] = map[string]interface{}{
-							"owner": map[string]interface{}{"cluster": tt.ownerCluster},
+						lc.Object["spec"] = map[string]any{
+							"owner": map[string]any{"cluster": tt.ownerCluster},
 						}
 					}
 				}).

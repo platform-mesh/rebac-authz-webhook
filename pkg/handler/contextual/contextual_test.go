@@ -501,7 +501,7 @@ func TestHandler(t *testing.T) {
 							"system:authenticated",
 							"system:cluster:consumer-cluster-id",
 						},
-						Extra:              map[string]v1.ExtraValue{},
+						Extra: map[string]v1.ExtraValue{},
 						ResourceAttributes: &v1.ResourceAttributes{
 							Group:    "apis.kcp.io",
 							Version:  "v1alpha1",
