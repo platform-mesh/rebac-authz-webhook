@@ -11,10 +11,10 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/retry"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/util"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
 const (
