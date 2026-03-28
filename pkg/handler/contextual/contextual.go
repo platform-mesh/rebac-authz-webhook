@@ -124,14 +124,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		return authorization.NoOpinion()
 	}
 
-	group := util.CapGroupToRelationLength(gvr, maxRelationLength)
-	group = strings.ReplaceAll(group, ".", "_")
-
-	objectType := fmt.Sprintf("%s_%s", group, singular)
-	longestObjectType := fmt.Sprintf("create_%ss", objectType)
-	if len(longestObjectType) > maxRelationLength {
-		objectType = objectType[len(longestObjectType)-maxRelationLength:]
-	}
+	group, objectType := buildObjectType(gvr, singular)
 
 	object := fmt.Sprintf("%s:%s/%s", objectType, clusterName, attrs.Name)
 	relation := attrs.Verb
@@ -220,10 +213,15 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 	}
 	providerClusterName := providerCluster[0]
 
+	if _, ok := c.clusterCache.Get(providerClusterName); !ok {
+		klog.InfoS("ContextualAuthorizer: provider cluster not found in cache", "clusterName", providerClusterName)
+		return authorization.NoOpinion()
+	}
+
 	consumerClusterID := ""
 	for _, group := range req.Spec.Groups {
-		if strings.HasPrefix(group, systemClusterPrefix) {
-			consumerClusterID = strings.TrimPrefix(group, systemClusterPrefix)
+		if id, ok := strings.CutPrefix(group, systemClusterPrefix); ok {
+			consumerClusterID = id
 			break
 		}
 	}
@@ -235,6 +233,11 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 
 	consumerInfo, ok := c.clusterCache.Get(consumerClusterID)
 	if !ok {
+		if c.cacheMissTracker.ShouldRetry(consumerClusterID) {
+			klog.V(5).InfoS("consumer cluster not found in cache, retrying", "clusterID", consumerClusterID)
+			c.cacheMissTracker.Retried(consumerClusterID)
+			return authorization.Retry(c.cacheMissRetryAfter)
+		}
 		klog.InfoS("ContextualAuthorizer: consumer cluster not found in cache", "clusterID", consumerClusterID)
 		return authorization.NoOpinion()
 	}
@@ -255,10 +258,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 		Resource: attrs.Resource,
 	}
 
-	group := util.CapGroupToRelationLength(gvr, maxRelationLength)
-	group = strings.ReplaceAll(group, ".", "_")
-
-	resourceObjectType := fmt.Sprintf("%s_%s", group, singular)
+	_, resourceObjectType := buildObjectType(gvr, singular)
 
 	resourceToBind := fmt.Sprintf("%s:%s/%s", resourceObjectType, providerClusterName, attrs.Name)
 	consumerAccountObject := fmt.Sprintf("core_platform-mesh_io_account:%s/%s",
@@ -288,4 +288,17 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 	}
 
 	return authorization.NoOpinion()
+}
+
+func buildObjectType(gvr schema.GroupVersionResource, singular string) (string, string) {
+	group := util.CapGroupToRelationLength(gvr, maxRelationLength)
+	group = strings.ReplaceAll(group, ".", "_")
+
+	objectType := fmt.Sprintf("%s_%s", group, singular)
+	longestObjectType := fmt.Sprintf("create_%ss", objectType)
+	if len(longestObjectType) > maxRelationLength {
+		objectType = objectType[len(longestObjectType)-maxRelationLength:]
+	}
+
+	return group, objectType
 }
