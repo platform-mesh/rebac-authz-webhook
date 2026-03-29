@@ -27,8 +27,3 @@ formatters:
       - third_party$
       - builtin$
       - examples$
-
-linters:
-  exclusions:
-    paths:
-      - watcher_test\.go$
