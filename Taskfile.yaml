@@ -30,6 +30,7 @@ tasks:
       - docker build .
   ## Testing
   fmt:
+    deps: [setup:golangci-lint]
     cmds:
       - "{{.LOCAL_BIN}}/golangci-lint fmt ./..."
   lint:
