@@ -208,7 +208,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 
 	providerCluster, ok := req.Spec.Extra[c.clusterKey]
 	if !ok || len(providerCluster) == 0 {
-		klog.InfoS("ContextualAuthorizer: bind request missing provider cluster in Extra", "clusterKey", c.clusterKey)
+		klog.V(5).InfoS("bind request missing provider cluster in Extra", "clusterKey", c.clusterKey)
 		return authorization.NoOpinion()
 	}
 	providerClusterName := providerCluster[0]
@@ -232,7 +232,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 	}
 
 	if consumerClusterID == "" {
-		klog.InfoS("ContextualAuthorizer: bind request missing consumer cluster in Groups")
+		klog.V(5).InfoS("bind request missing consumer cluster in Groups")
 		return authorization.NoOpinion()
 	}
 
@@ -243,7 +243,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 			c.cacheMissTracker.Retried(consumerClusterID)
 			return authorization.Retry(c.cacheMissRetryAfter)
 		}
-		klog.InfoS("ContextualAuthorizer: consumer cluster not found in cache", "clusterID", consumerClusterID)
+		klog.V(5).InfoS("consumer cluster not found in cache", "clusterID", consumerClusterID)
 		return authorization.NoOpinion()
 	}
 
