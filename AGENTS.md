@@ -20,6 +20,27 @@
 - `config/authz.yaml`: local authorization webhook config.
 - `kind.yaml`: local kind setup for development and debugging.
 
+## Architecture
+This service is an authorization webhook. The main runtime path is: receive `SubjectAccessReview`, choose the right handler branch, and resolve authorization context through OpenFGA plus KCP-derived cluster metadata.
+
+### Runtime model
+- `cmd/serve.go` creates an `mcmanager.Manager` backed by an APIExport provider, but the manager is primarily used as a webhook host plus a source of multicluster access.
+- The webhook server registers a single `/authz` endpoint and adds health/readiness checks.
+- Startup resolves the OpenFGA `orgs` store, root KCP cluster client, orgs cluster id, and a long-lived cluster cache before serving traffic.
+
+### Authorization model
+- `pkg/authorization/webhook.go` only handles HTTP decoding/encoding of `SubjectAccessReview`; authorization decisions come from composed handlers.
+- Handler composition in `cmd/serve.go` uses `union.New(...)` over non-resource, org-scoped, and contextual handlers.
+- The contextual path depends on `pkg/clustercache`, which maps cluster names to store id, account name, parent cluster id, and a REST mapper.
+
+### KCP and cache model
+- `pkg/clustercache` rewrites the root config to `/clusters/root:orgs`, loads org `Store` resources, and builds a dynamic REST mapper per engaged cluster.
+- Cache misses are retried through an expiring retry tracker; changes here directly affect webhook behavior under new or still-initializing clusters.
+
+### Configuration and tests
+- Most runtime behavior is flag-driven from `pkg/config`, including endpoint slice name, allowed non-resource prefixes, retry timing, and webhook TLS settings.
+- Focused package tests are important because broad behavior changes can alter every Kubernetes authorization decision.
+
 ## Commands
 - `task fmt` — format code with golangci-lint formatting.
 - `task lint` — run formatting plus golangci-lint.
