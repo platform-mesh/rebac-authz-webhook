@@ -17,34 +17,11 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	tests := []struct {
-		name    string
-		host    string
-		wantErr bool
-	}{
-		{
-			name: "valid URL",
-			host: "https://example.com",
-		},
-		{
-			name:    "invalid URL",
-			host:    "://invalid-url",
-			wantErr: true,
-		},
-	}
+	mgr := mocks.NewManager(t)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cc, err := clustercache.New(&rest.Config{Host: tt.host})
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Nil(t, cc)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, cc)
-			}
-		})
-	}
+	cc, err := clustercache.New(mgr)
+	assert.NoError(t, err)
+	assert.NotNil(t, cc)
 }
 
 func TestClusterCache_Engage(t *testing.T) {
@@ -101,6 +78,8 @@ func TestClusterCache_Engage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cl := mocks.NewCluster(t)
 			k8sClient := mocks.NewClient(t)
+			mgr := mocks.NewManager(t)
+			orgsCluster := mocks.NewCluster(t)
 			orgsClient := mocks.NewClient(t)
 
 			cl.EXPECT().GetClient().Return(k8sClient)
@@ -125,14 +104,17 @@ func TestClusterCache_Engage(t *testing.T) {
 				Return(tt.lcGetErr)
 
 			if tt.setupOrgsClient != nil {
+				mgr.EXPECT().GetCluster(mock.Anything, "root:orgs").Return(orgsCluster, nil)
+				orgsCluster.EXPECT().GetClient().Return(orgsClient)
 				tt.setupOrgsClient(orgsClient)
 			}
 			if tt.setupCluster != nil {
 				tt.setupCluster(cl)
 			}
 
-			cc := clustercache.NewWithClient(orgsClient)
-			err := cc.Engage(ctx, "test-cluster", cl)
+			cc, err := clustercache.New(mgr)
+			assert.NoError(t, err)
+			err = cc.Engage(ctx, "test-cluster", cl)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -153,7 +135,9 @@ func TestClusterCache_Engage(t *testing.T) {
 }
 
 func TestClusterCache_Get_NotFound(t *testing.T) {
-	cc := clustercache.NewWithClient(nil)
+	mgr := mocks.NewManager(t)
+	cc, err := clustercache.New(mgr)
+	assert.NoError(t, err)
 	info, found := cc.Get("non-existing")
 	assert.False(t, found)
 	assert.Empty(t, info.StoreID)
