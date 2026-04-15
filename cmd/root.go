@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	kcpcorev1alpha "github.com/kcp-dev/sdk/apis/core/v1alpha1"
 	"github.com/spf13/cobra"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +31,7 @@ var (
 
 func init() {
 	utilruntime.Must(kcpsdkapisv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kcpcorev1alpha.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	rootCmd.AddCommand(NewServeCmd())

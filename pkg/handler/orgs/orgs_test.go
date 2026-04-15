@@ -1,8 +1,10 @@
 package orgs_test
 
 import (
+	"context"
 	"testing"
 
+	kcpcorev1alpha "github.com/kcp-dev/sdk/apis/core/v1alpha1"
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
@@ -11,6 +13,8 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	v1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestHandler(t *testing.T) {
@@ -104,11 +108,32 @@ func TestHandler(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 
 			openfga := mocks.NewOpenFGAServiceClient(t)
+			mgr := mocks.NewManager(t)
+			cluster := mocks.NewCluster(t)
+			orgsClient := mocks.NewClient(t)
+
+			mgr.EXPECT().
+				GetCluster(mock.Anything, "root:orgs").
+				Return(cluster, nil).
+				Maybe()
+			cluster.EXPECT().
+				GetClient().
+				Return(orgsClient).
+				Maybe()
+			orgsClient.EXPECT().
+				Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).
+				Run(func(ctx context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+					lc := obj.(*kcpcorev1alpha.LogicalCluster)
+					lc.Annotations = map[string]string{"kcp.io/cluster": "a"}
+				}).
+				Return(nil).
+				Maybe()
+
 			if test.fgaMocks != nil {
 				test.fgaMocks(openfga)
 			}
 
-			h := orgs.New(openfga, "authorization.kubernetes.io/cluster-name", "a", "b")
+			h := orgs.New(openfga, mgr, "authorization.kubernetes.io/cluster-name", "b")
 
 			ctx := t.Context()
 

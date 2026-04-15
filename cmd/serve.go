@@ -3,7 +3,6 @@ package cmd
 import (
 	"crypto/tls"
 	"net/http"
-	"net/url"
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
@@ -20,8 +19,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -29,9 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
-
-	"github.com/kcp-dev/logicalcluster/v3"
-	kcpclientset "github.com/kcp-dev/sdk/client/clientset/versioned/cluster"
 
 	"github.com/kcp-dev/multicluster-provider/apiexport"
 	pathaware "github.com/kcp-dev/multicluster-provider/path-aware"
@@ -86,6 +80,11 @@ func NewServeCmd() *cobra.Command {
 				klog.Exit(err, "unable to set up overall controller manager")
 			}
 
+			clusterCache, err := clustercache.New(mgr)
+			if err != nil {
+				klog.Exit(err, "failed to create cluster cache")
+			}
+
 			conn, err := grpc.NewClient(serverCfg.OpenFGAAddr,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
@@ -106,41 +105,13 @@ func NewServeCmd() *cobra.Command {
 			}
 			klog.InfoS("using OpenFGA store", "id", storeRes.Stores[0].Id)
 
-			rootCfg := rest.CopyConfig(restCfg)
-			rootURL, err := url.Parse(rootCfg.Host)
-			if err != nil {
-				klog.Exit(err, "failed to parse root cluster URL")
-			}
-
-			rootURL.Path = ""
-			rootCfg.Host = rootURL.String()
-
-			clusterClient, err := kcpclientset.NewForConfig(rootCfg)
-			if err != nil {
-				klog.Exit(err, "failed to construct cluster client")
-			}
-
-			orgsCluster, err := clusterClient.Cluster(logicalcluster.NewPath("root:orgs")).CoreV1alpha1().LogicalClusters().Get(ctx, "cluster", metav1.GetOptions{})
-			if err != nil {
-				klog.Exit(err, "failed to get orgs cluster")
-			}
-
-			orgsClusterID := logicalcluster.From(orgsCluster)
-			klog.InfoS("found orgs cluster", "name", orgsCluster.Name, "cluster", orgsClusterID.String())
-
-			clusterCache, err := clustercache.New(mgr)
-			if err != nil {
-				klog.Exit(err, "failed to create cluster cache")
-			}
-
 			extraAttrClusterKey := serverCfg.Webhook.ClusterKey
 			cacheMissTracker := retry.NewExpiringRetryTracker[string](ctx, serverCfg.Webhook.CacheMissMaxRetries, serverCfg.Webhook.CacheMissTTL)
-
 			mgr.GetWebhookServer().Register("/authz", authorization.New(
 				klog.NewKlogr(),
 				union.New(
 					nonresourceattributes.New(serverCfg.Webhook.AllowedNonResourcePrefixes...),
-					orgs.New(fga, extraAttrClusterKey, orgsClusterID.String(), storeRes.Stores[0].Id),
+					orgs.New(fga, mgr, extraAttrClusterKey, storeRes.Stores[0].Id),
 					contextual.New(fga, clusterCache, extraAttrClusterKey, cacheMissTracker, serverCfg.Webhook.CacheMissRetryAfter),
 				),
 			))
