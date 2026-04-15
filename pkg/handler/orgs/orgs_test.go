@@ -2,6 +2,7 @@ package orgs_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	kcpcorev1alpha "github.com/kcp-dev/sdk/apis/core/v1alpha1"
@@ -19,10 +20,11 @@ import (
 
 func TestHandler(t *testing.T) {
 	testCases := []struct {
-		name     string
-		req      authorization.Request
-		res      authorization.Response
-		fgaMocks func(openfga *mocks.OpenFGAServiceClient)
+		name              string
+		req               authorization.Request
+		res               authorization.Response
+		fgaMocks          func(openfga *mocks.OpenFGAServiceClient)
+		setupManagerMocks func(mgr *mocks.Manager, cluster *mocks.Cluster, orgsClient *mocks.Client)
 	}{
 		{
 			name: "should skip processing if no extra attrs present",
@@ -50,10 +52,101 @@ func TestHandler(t *testing.T) {
 						Extra: map[string]v1.ExtraValue{
 							"authorization.kubernetes.io/cluster-name": {"b"},
 						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "a",
+							Version:  "b",
+							Resource: "c",
+						},
 					},
 				},
 			},
 			res: authorization.NoOpinion(),
+		},
+		{
+			name: "should skip processing if request does not contain ResourceAttributes",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+		},
+		{
+			name: "should skip processing if manager cannot get orgs cluster",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "a",
+							Version:  "b",
+							Resource: "c",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			setupManagerMocks: func(mgr *mocks.Manager, cluster *mocks.Cluster, orgsClient *mocks.Client) {
+				mgr.EXPECT().GetCluster(mock.Anything, "root:orgs").Return(nil, errors.New("cluster lookup failed"))
+			},
+		},
+		{
+			name: "should skip processing if logical cluster get fails",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "a",
+							Version:  "b",
+							Resource: "c",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			setupManagerMocks: func(mgr *mocks.Manager, cluster *mocks.Cluster, orgsClient *mocks.Client) {
+				mgr.EXPECT().GetCluster(mock.Anything, "root:orgs").Return(cluster, nil)
+				cluster.EXPECT().GetClient().Return(orgsClient)
+				orgsClient.EXPECT().Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).Return(errors.New("get failed"))
+			},
+		},
+		{
+			name: "should skip processing if logical cluster annotation is missing",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "a",
+							Version:  "b",
+							Resource: "c",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			setupManagerMocks: func(mgr *mocks.Manager, cluster *mocks.Cluster, orgsClient *mocks.Client) {
+				mgr.EXPECT().GetCluster(mock.Anything, "root:orgs").Return(cluster, nil)
+				cluster.EXPECT().GetClient().Return(orgsClient)
+				orgsClient.EXPECT().
+					Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).
+					Run(func(ctx context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+						lc := obj.(*kcpcorev1alpha.LogicalCluster)
+						lc.Annotations = map[string]string{}
+					}).
+					Return(nil)
+			},
 		},
 		{
 			name: "should allow if fga check allows",
@@ -103,6 +196,27 @@ func TestHandler(t *testing.T) {
 					}, nil)
 			},
 		},
+		{
+			name: "should skip processing if fga check returns an error",
+			req: authorization.Request{
+				SubjectAccessReview: v1.SubjectAccessReview{
+					Spec: v1.SubjectAccessReviewSpec{
+						Extra: map[string]v1.ExtraValue{
+							"authorization.kubernetes.io/cluster-name": {"a"},
+						},
+						ResourceAttributes: &v1.ResourceAttributes{
+							Group:    "a",
+							Version:  "b",
+							Resource: "c",
+						},
+					},
+				},
+			},
+			res: authorization.NoOpinion(),
+			fgaMocks: func(openfga *mocks.OpenFGAServiceClient) {
+				openfga.EXPECT().Check(mock.Anything, mock.Anything).Return(nil, errors.New("fga check failed"))
+			},
+		},
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
@@ -112,22 +226,20 @@ func TestHandler(t *testing.T) {
 			cluster := mocks.NewCluster(t)
 			orgsClient := mocks.NewClient(t)
 
-			mgr.EXPECT().
-				GetCluster(mock.Anything, "root:orgs").
-				Return(cluster, nil).
-				Maybe()
-			cluster.EXPECT().
-				GetClient().
-				Return(orgsClient).
-				Maybe()
-			orgsClient.EXPECT().
-				Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).
-				Run(func(ctx context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
-					lc := obj.(*kcpcorev1alpha.LogicalCluster)
-					lc.Annotations = map[string]string{"kcp.io/cluster": "a"}
-				}).
-				Return(nil).
-				Maybe()
+			if test.setupManagerMocks != nil {
+				test.setupManagerMocks(mgr, cluster, orgsClient)
+			} else {
+				mgr.EXPECT().GetCluster(mock.Anything, "root:orgs").Return(cluster, nil).Maybe()
+				cluster.EXPECT().GetClient().Return(orgsClient).Maybe()
+				orgsClient.EXPECT().
+					Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).
+					Run(func(ctx context.Context, _ types.NamespacedName, obj client.Object, _ ...client.GetOption) {
+						lc := obj.(*kcpcorev1alpha.LogicalCluster)
+						lc.Annotations = map[string]string{"kcp.io/cluster": "a"}
+					}).
+					Return(nil).
+					Maybe()
+			}
 
 			if test.fgaMocks != nil {
 				test.fgaMocks(openfga)
