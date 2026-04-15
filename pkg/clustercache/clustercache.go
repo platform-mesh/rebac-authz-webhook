@@ -37,36 +37,22 @@ type Provider interface {
 }
 
 type clusterCache struct {
-	lock       sync.RWMutex
-	cache      map[string]ClusterInfo
-	orgsClient client.Client
+	lock  sync.RWMutex
+	cache map[string]ClusterInfo
+	mgr   mcmanager.Manager
 }
 
-func New(cfg *rest.Config) (*clusterCache, error) {
-	copiedCfg := rest.CopyConfig(cfg)
-	parsed, err := url.Parse(copiedCfg.Host)
-	if err != nil {
-		return nil, err
-	}
-
-	parsed.Path = "/clusters/root:orgs"
-	copiedCfg.Host = parsed.String()
-
-	orgsClient, err := client.New(copiedCfg, client.Options{})
-	if err != nil {
-		return nil, err
-	}
+func New(mgr mcmanager.Manager) (*clusterCache, error) {
 
 	return &clusterCache{
-		cache:      make(map[string]ClusterInfo),
-		orgsClient: orgsClient,
+		cache: make(map[string]ClusterInfo),
+		mgr:   mgr,
 	}, nil
 }
 
 func NewWithClient(orgsClient client.Client) *clusterCache {
 	return &clusterCache{
-		cache:      make(map[string]ClusterInfo),
-		orgsClient: orgsClient,
+		cache: make(map[string]ClusterInfo),
 	}
 }
 
@@ -129,7 +115,14 @@ func (c *clusterCache) Engage(ctx context.Context, name string, cl cluster.Clust
 			Version: "v1alpha1",
 			Kind:    "Store",
 		})
-		if err := c.orgsClient.Get(ctx, types.NamespacedName{Name: orgName}, &store); err != nil {
+
+		orgsCluster, err := c.mgr.GetCluster(ctx, "root:orgs")
+		if err != nil {
+			return false, err
+		}
+		orgsClient := orgsCluster.GetClient()
+
+		if err := orgsClient.Get(ctx, types.NamespacedName{Name: orgName}, &store); err != nil {
 			klog.V(5).ErrorS(err, "Failed to get Store for org, will retry", "clusterName", name, "orgName", orgName)
 			return false, nil
 		}

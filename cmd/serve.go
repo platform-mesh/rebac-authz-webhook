@@ -34,6 +34,7 @@ import (
 	kcpclientset "github.com/kcp-dev/sdk/client/clientset/versioned/cluster"
 
 	"github.com/kcp-dev/multicluster-provider/apiexport"
+	pathaware "github.com/kcp-dev/multicluster-provider/path-aware"
 )
 
 var serverCfg *config.Config
@@ -56,7 +57,7 @@ func NewServeCmd() *cobra.Command {
 			endpointSliceName := serverCfg.APIExportEndpointSliceName
 			klog.InfoS("using endpoint slice name", "name", endpointSliceName)
 
-			provider, err := apiexport.New(restCfg, endpointSliceName, apiexport.Options{
+			provider, err := pathaware.New(restCfg, endpointSliceName, apiexport.Options{
 				Scheme: scheme,
 			})
 			if err != nil {
@@ -127,7 +128,7 @@ func NewServeCmd() *cobra.Command {
 			orgsClusterID := logicalcluster.From(orgsCluster)
 			klog.InfoS("found orgs cluster", "name", orgsCluster.Name, "cluster", orgsClusterID.String())
 
-			clusterCache, err := clustercache.New(restCfg)
+			clusterCache, err := clustercache.New(mgr)
 			if err != nil {
 				klog.Exit(err, "failed to create cluster cache")
 			}
