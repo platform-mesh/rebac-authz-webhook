@@ -20,7 +20,11 @@ func CapGroupToRelationLength(gvr schema.GroupVersionResource, maxLength int) st
 	}
 
 	if len(maxRelation) > maxLength {
-		return group[len(maxRelation)-maxLength:]
+		start := len(maxRelation) - maxLength
+		if start > len(group) {
+			return ""
+		}
+		return group[start:]
 	}
 
 	return group
