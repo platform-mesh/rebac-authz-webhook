@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/kcp-dev/logicalcluster/v3 v3.0.5
-	github.com/kcp-dev/multicluster-provider v0.5.1
+	github.com/kcp-dev/multicluster-provider v0.6.0
 	github.com/kcp-dev/sdk v0.31.0
 	github.com/openfga/api/proto v0.0.0-20260319214821-f153694bfc20
 	github.com/spf13/cobra v1.10.2
@@ -21,7 +21,7 @@ require (
 	k8s.io/component-base v0.35.4
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/controller-runtime v0.23.3
-	sigs.k8s.io/multicluster-runtime v0.23.1
+	sigs.k8s.io/multicluster-runtime v0.23.3
 )
 
 require (
