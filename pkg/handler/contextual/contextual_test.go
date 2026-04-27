@@ -18,6 +18,7 @@ import (
 	v1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
 )
 
 func TestHandler(t *testing.T) {
@@ -48,7 +49,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.Retry(time.Second),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{}, false)
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{}, false)
 			},
 			cacheMissTrackerMocks: func(tracker *mocks.Tracker[string]) {
 				tracker.EXPECT().ShouldRetry("a").Return(true)
@@ -69,7 +70,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{}, false)
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{}, false)
 			},
 		},
 		{
@@ -91,7 +92,7 @@ func TestHandler(t *testing.T) {
 			res: authorization.NoOpinion(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
 				rm := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{
 					StoreID:         "store-id",
 					RESTMapper:      rm,
 					AccountName:     "origin-account",
@@ -133,7 +134,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{
 					StoreID:         "store-id",
 					RESTMapper:      rm,
 					AccountName:     "origin-account",
@@ -200,7 +201,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeNamespace,
 				)
 
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{
 					StoreID:         "store-id",
 					RESTMapper:      rm,
 					AccountName:     "origin-account",
@@ -275,7 +276,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeNamespace,
 				)
 
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{
 					StoreID:         "store-id",
 					RESTMapper:      rm,
 					AccountName:     "origin-account",
@@ -341,7 +342,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{
 					StoreID:         "store-id",
 					RESTMapper:      rm,
 					AccountName:     "origin-account",
@@ -398,7 +399,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.Allowed(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("provider-cluster-id").Return(clustercache.ClusterInfo{}, true)
+				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
 
 				consumerRM := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 				consumerGV := schema.GroupVersion{
@@ -412,7 +413,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				cc.EXPECT().Get("consumer-cluster-id").Return(clustercache.ClusterInfo{
+				cc.EXPECT().Get(multicluster.ClusterName("consumer-cluster-id")).Return(clustercache.ClusterInfo{
 					StoreID:         "consumer-store-id",
 					RESTMapper:      consumerRM,
 					AccountName:     "consumer-account",
@@ -460,8 +461,8 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("provider-cluster-id").Return(clustercache.ClusterInfo{}, true)
-				cc.EXPECT().Get("consumer-cluster-id").Return(clustercache.ClusterInfo{}, false)
+				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
+				cc.EXPECT().Get(multicluster.ClusterName("consumer-cluster-id")).Return(clustercache.ClusterInfo{}, false)
 			},
 		},
 		{
@@ -488,7 +489,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("provider-cluster-id").Return(clustercache.ClusterInfo{}, true)
+				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
 			},
 		},
 		{
@@ -539,7 +540,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("provider-cluster-id").Return(clustercache.ClusterInfo{}, false)
+				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, false)
 			},
 		},
 		{
@@ -567,7 +568,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.Retry(time.Second),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("provider-cluster-id").Return(clustercache.ClusterInfo{}, false)
+				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, false)
 			},
 			cacheMissTrackerMocks: func(tracker *mocks.Tracker[string]) {
 				tracker.EXPECT().ShouldRetry("provider-cluster-id").Return(true)
@@ -599,8 +600,8 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.Retry(time.Second),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get("provider-cluster-id").Return(clustercache.ClusterInfo{}, true)
-				cc.EXPECT().Get("consumer-cluster-id").Return(clustercache.ClusterInfo{}, false)
+				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
+				cc.EXPECT().Get(multicluster.ClusterName("consumer-cluster-id")).Return(clustercache.ClusterInfo{}, false)
 			},
 			cacheMissTrackerMocks: func(tracker *mocks.Tracker[string]) {
 				tracker.EXPECT().ShouldRetry("consumer-cluster-id").Return(true)
@@ -646,7 +647,7 @@ func TestHandler(t *testing.T) {
 					meta.RESTScopeRoot,
 				)
 
-				cc.EXPECT().Get("a").Return(clustercache.ClusterInfo{
+				cc.EXPECT().Get(multicluster.ClusterName("a")).Return(clustercache.ClusterInfo{
 					StoreID:         "store-id",
 					RESTMapper:      rm,
 					AccountName:     "origin-account",
