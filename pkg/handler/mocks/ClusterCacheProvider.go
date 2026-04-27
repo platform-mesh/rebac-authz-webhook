@@ -10,6 +10,7 @@ import (
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
 	mock "github.com/stretchr/testify/mock"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
 )
 
 // NewClusterCacheProvider creates a new instance of ClusterCacheProvider. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -40,16 +41,16 @@ func (_m *ClusterCacheProvider) EXPECT() *ClusterCacheProvider_Expecter {
 }
 
 // Engage provides a mock function for the type ClusterCacheProvider
-func (_mock *ClusterCacheProvider) Engage(context1 context.Context, s string, cluster1 cluster.Cluster) error {
-	ret := _mock.Called(context1, s, cluster1)
+func (_mock *ClusterCacheProvider) Engage(context1 context.Context, clusterName multicluster.ClusterName, cluster1 cluster.Cluster) error {
+	ret := _mock.Called(context1, clusterName, cluster1)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Engage")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, cluster.Cluster) error); ok {
-		r0 = returnFunc(context1, s, cluster1)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, multicluster.ClusterName, cluster.Cluster) error); ok {
+		r0 = returnFunc(context1, clusterName, cluster1)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -63,21 +64,21 @@ type ClusterCacheProvider_Engage_Call struct {
 
 // Engage is a helper method to define mock.On call
 //   - context1 context.Context
-//   - s string
+//   - clusterName multicluster.ClusterName
 //   - cluster1 cluster.Cluster
-func (_e *ClusterCacheProvider_Expecter) Engage(context1 interface{}, s interface{}, cluster1 interface{}) *ClusterCacheProvider_Engage_Call {
-	return &ClusterCacheProvider_Engage_Call{Call: _e.mock.On("Engage", context1, s, cluster1)}
+func (_e *ClusterCacheProvider_Expecter) Engage(context1 interface{}, clusterName interface{}, cluster1 interface{}) *ClusterCacheProvider_Engage_Call {
+	return &ClusterCacheProvider_Engage_Call{Call: _e.mock.On("Engage", context1, clusterName, cluster1)}
 }
 
-func (_c *ClusterCacheProvider_Engage_Call) Run(run func(context1 context.Context, s string, cluster1 cluster.Cluster)) *ClusterCacheProvider_Engage_Call {
+func (_c *ClusterCacheProvider_Engage_Call) Run(run func(context1 context.Context, clusterName multicluster.ClusterName, cluster1 cluster.Cluster)) *ClusterCacheProvider_Engage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 multicluster.ClusterName
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(multicluster.ClusterName)
 		}
 		var arg2 cluster.Cluster
 		if args[2] != nil {
@@ -97,13 +98,13 @@ func (_c *ClusterCacheProvider_Engage_Call) Return(err error) *ClusterCacheProvi
 	return _c
 }
 
-func (_c *ClusterCacheProvider_Engage_Call) RunAndReturn(run func(context1 context.Context, s string, cluster1 cluster.Cluster) error) *ClusterCacheProvider_Engage_Call {
+func (_c *ClusterCacheProvider_Engage_Call) RunAndReturn(run func(context1 context.Context, clusterName multicluster.ClusterName, cluster1 cluster.Cluster) error) *ClusterCacheProvider_Engage_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Get provides a mock function for the type ClusterCacheProvider
-func (_mock *ClusterCacheProvider) Get(clusterName string) (clustercache.ClusterInfo, bool) {
+func (_mock *ClusterCacheProvider) Get(clusterName multicluster.ClusterName) (clustercache.ClusterInfo, bool) {
 	ret := _mock.Called(clusterName)
 
 	if len(ret) == 0 {
@@ -112,15 +113,15 @@ func (_mock *ClusterCacheProvider) Get(clusterName string) (clustercache.Cluster
 
 	var r0 clustercache.ClusterInfo
 	var r1 bool
-	if returnFunc, ok := ret.Get(0).(func(string) (clustercache.ClusterInfo, bool)); ok {
+	if returnFunc, ok := ret.Get(0).(func(multicluster.ClusterName) (clustercache.ClusterInfo, bool)); ok {
 		return returnFunc(clusterName)
 	}
-	if returnFunc, ok := ret.Get(0).(func(string) clustercache.ClusterInfo); ok {
+	if returnFunc, ok := ret.Get(0).(func(multicluster.ClusterName) clustercache.ClusterInfo); ok {
 		r0 = returnFunc(clusterName)
 	} else {
 		r0 = ret.Get(0).(clustercache.ClusterInfo)
 	}
-	if returnFunc, ok := ret.Get(1).(func(string) bool); ok {
+	if returnFunc, ok := ret.Get(1).(func(multicluster.ClusterName) bool); ok {
 		r1 = returnFunc(clusterName)
 	} else {
 		r1 = ret.Get(1).(bool)
@@ -134,16 +135,16 @@ type ClusterCacheProvider_Get_Call struct {
 }
 
 // Get is a helper method to define mock.On call
-//   - clusterName string
+//   - clusterName multicluster.ClusterName
 func (_e *ClusterCacheProvider_Expecter) Get(clusterName interface{}) *ClusterCacheProvider_Get_Call {
 	return &ClusterCacheProvider_Get_Call{Call: _e.mock.On("Get", clusterName)}
 }
 
-func (_c *ClusterCacheProvider_Get_Call) Run(run func(clusterName string)) *ClusterCacheProvider_Get_Call {
+func (_c *ClusterCacheProvider_Get_Call) Run(run func(clusterName multicluster.ClusterName)) *ClusterCacheProvider_Get_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 string
+		var arg0 multicluster.ClusterName
 		if args[0] != nil {
-			arg0 = args[0].(string)
+			arg0 = args[0].(multicluster.ClusterName)
 		}
 		run(
 			arg0,
@@ -157,7 +158,7 @@ func (_c *ClusterCacheProvider_Get_Call) Return(clusterInfo clustercache.Cluster
 	return _c
 }
 
-func (_c *ClusterCacheProvider_Get_Call) RunAndReturn(run func(clusterName string) (clustercache.ClusterInfo, bool)) *ClusterCacheProvider_Get_Call {
+func (_c *ClusterCacheProvider_Get_Call) RunAndReturn(run func(clusterName multicluster.ClusterName) (clustercache.ClusterInfo, bool)) *ClusterCacheProvider_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }

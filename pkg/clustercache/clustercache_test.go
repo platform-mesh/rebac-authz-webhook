@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
 )
 
 func TestNew(t *testing.T) {
@@ -104,7 +105,7 @@ func TestClusterCache_Engage(t *testing.T) {
 				Return(tt.lcGetErr)
 
 			if tt.setupOrgsClient != nil {
-				mgr.EXPECT().GetCluster(mock.Anything, "root:orgs").Return(orgsCluster, nil)
+				mgr.EXPECT().GetCluster(mock.Anything, multicluster.ClusterName("root:orgs")).Return(orgsCluster, nil)
 				orgsCluster.EXPECT().GetClient().Return(orgsClient)
 				tt.setupOrgsClient(orgsClient)
 			}
@@ -114,7 +115,7 @@ func TestClusterCache_Engage(t *testing.T) {
 
 			cc, err := clustercache.New(mgr)
 			assert.NoError(t, err)
-			err = cc.Engage(ctx, "test-cluster", cl)
+			err = cc.Engage(ctx, multicluster.ClusterName("test-cluster"), cl)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -123,7 +124,7 @@ func TestClusterCache_Engage(t *testing.T) {
 
 			assert.NoError(t, err)
 
-			info, found := cc.Get("test-cluster")
+			info, found := cc.Get(multicluster.ClusterName("test-cluster"))
 			assert.Equal(t, tt.wantCached, found)
 			if tt.wantCached {
 				assert.Equal(t, tt.wantAccountName, info.AccountName)
@@ -138,7 +139,7 @@ func TestClusterCache_Get_NotFound(t *testing.T) {
 	mgr := mocks.NewManager(t)
 	cc, err := clustercache.New(mgr)
 	assert.NoError(t, err)
-	info, found := cc.Get("non-existing")
+	info, found := cc.Get(multicluster.ClusterName("non-existing"))
 	assert.False(t, found)
 	assert.Empty(t, info.StoreID)
 }

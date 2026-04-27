@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
 
 	"github.com/kcp-dev/logicalcluster/v3"
 )
@@ -33,37 +34,37 @@ type ClusterInfo struct {
 
 type Provider interface {
 	mcmanager.Runnable
-	Get(clusterName string) (ClusterInfo, bool)
+	Get(clusterName multicluster.ClusterName) (ClusterInfo, bool)
 }
 
 type clusterCache struct {
 	lock  sync.RWMutex
-	cache map[string]ClusterInfo
+	cache map[multicluster.ClusterName]ClusterInfo
 	mgr   mcmanager.Manager
 }
 
 func New(mgr mcmanager.Manager) (*clusterCache, error) {
 
 	return &clusterCache{
-		cache: make(map[string]ClusterInfo),
+		cache: make(map[multicluster.ClusterName]ClusterInfo),
 		mgr:   mgr,
 	}, nil
 }
 
 func NewWithClient(orgsClient client.Client) *clusterCache {
 	return &clusterCache{
-		cache: make(map[string]ClusterInfo),
+		cache: make(map[multicluster.ClusterName]ClusterInfo),
 	}
 }
 
-func (c *clusterCache) Get(clusterName string) (ClusterInfo, bool) {
+func (c *clusterCache) Get(clusterName multicluster.ClusterName) (ClusterInfo, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	val, ok := c.cache[clusterName]
 	return val, ok
 }
 
-func (c *clusterCache) Engage(ctx context.Context, name string, cl cluster.Cluster) error {
+func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName, cl cluster.Cluster) error {
 	klog.V(5).InfoS("Engaging cluster", "clusterName", name)
 
 	var lc unstructured.Unstructured
@@ -150,7 +151,7 @@ func (c *clusterCache) Engage(ctx context.Context, name string, cl cluster.Clust
 		return err
 	}
 
-	path, err := url.JoinPath("clusters", name)
+	path, err := url.JoinPath("clusters", name.String())
 	if err != nil {
 		return err
 	}

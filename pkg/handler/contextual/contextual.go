@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
 )
 
 const (
@@ -74,7 +75,7 @@ func (c *contextualAuthorizer) Handle(ctx context.Context, req authorization.Req
 		return c.handleKCPBindCheck(ctx, req)
 	}
 
-	clusterInfo, ok := c.clusterCache.Get(clusterName)
+	clusterInfo, ok := c.clusterCache.Get(multicluster.ClusterName(clusterName))
 	if !ok {
 		if c.cacheMissTracker.ShouldRetry(clusterName) {
 			klog.V(5).InfoS("cluster not found in cache, retrying", "clusterName", clusterName)
@@ -213,7 +214,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 	}
 	providerClusterName := providerCluster[0]
 
-	if _, ok := c.clusterCache.Get(providerClusterName); !ok {
+	if _, ok := c.clusterCache.Get(multicluster.ClusterName(providerClusterName)); !ok {
 		if c.cacheMissTracker.ShouldRetry(providerClusterName) {
 			klog.V(5).InfoS("provider cluster not found in cache, retrying", "clusterName", providerClusterName)
 			c.cacheMissTracker.Retried(providerClusterName)
@@ -236,7 +237,7 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 		return authorization.NoOpinion()
 	}
 
-	consumerInfo, ok := c.clusterCache.Get(consumerClusterID)
+	consumerInfo, ok := c.clusterCache.Get(multicluster.ClusterName(consumerClusterID))
 	if !ok {
 		if c.cacheMissTracker.ShouldRetry(consumerClusterID) {
 			klog.V(5).InfoS("consumer cluster not found in cache, retrying", "clusterID", consumerClusterID)
