@@ -399,8 +399,6 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.Allowed(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
-
 				consumerRM := meta.NewDefaultRESTMapper([]schema.GroupVersion{})
 				consumerGV := schema.GroupVersion{
 					Group:   "apis.kcp.io",
@@ -461,7 +459,6 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
 				cc.EXPECT().Get(multicluster.ClusterName("consumer-cluster-id")).Return(clustercache.ClusterInfo{}, false)
 			},
 		},
@@ -488,9 +485,6 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.NoOpinion(),
-			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
-			},
 		},
 		{
 			name: "should return no opinion if bind verb and provider cluster not in extra",
@@ -514,66 +508,6 @@ func TestHandler(t *testing.T) {
 				},
 			},
 			res: authorization.NoOpinion(),
-		},
-		{
-			name: "should return no opinion if bind verb and provider cluster not found in cache",
-			req: authorization.Request{
-				SubjectAccessReview: v1.SubjectAccessReview{
-					Spec: v1.SubjectAccessReviewSpec{
-						User: "system:anonymous",
-						Groups: []string{
-							"system:authenticated",
-							"system:cluster:consumer-cluster-id",
-						},
-						Extra: map[string]v1.ExtraValue{
-							"authorization.kubernetes.io/cluster-name": {"provider-cluster-id"},
-						},
-						ResourceAttributes: &v1.ResourceAttributes{
-							Group:    "apis.kcp.io",
-							Version:  "v1alpha1",
-							Resource: "apiexports",
-							Verb:     "bind",
-							Name:     "test-export",
-						},
-					},
-				},
-			},
-			res: authorization.NoOpinion(),
-			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, false)
-			},
-		},
-		{
-			name: "should retry if bind verb and provider cluster not found in cache and cacheMissTracker returns true",
-			req: authorization.Request{
-				SubjectAccessReview: v1.SubjectAccessReview{
-					Spec: v1.SubjectAccessReviewSpec{
-						User: "system:anonymous",
-						Groups: []string{
-							"system:authenticated",
-							"system:cluster:consumer-cluster-id",
-						},
-						Extra: map[string]v1.ExtraValue{
-							"authorization.kubernetes.io/cluster-name": {"provider-cluster-id"},
-						},
-						ResourceAttributes: &v1.ResourceAttributes{
-							Group:    "apis.kcp.io",
-							Version:  "v1alpha1",
-							Resource: "apiexports",
-							Verb:     "bind",
-							Name:     "test-export",
-						},
-					},
-				},
-			},
-			res: authorization.Retry(time.Second),
-			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, false)
-			},
-			cacheMissTrackerMocks: func(tracker *mocks.Tracker[string]) {
-				tracker.EXPECT().ShouldRetry("provider-cluster-id").Return(true)
-				tracker.EXPECT().Retried("provider-cluster-id")
-			},
 		},
 		{
 			name: "should retry if bind verb and consumer cluster not found in cache and cacheMissTracker returns true",
@@ -600,7 +534,6 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.Retry(time.Second),
 			clusterCacheMocks: func(cc *mocks.ClusterCacheProvider) {
-				cc.EXPECT().Get(multicluster.ClusterName("provider-cluster-id")).Return(clustercache.ClusterInfo{}, true)
 				cc.EXPECT().Get(multicluster.ClusterName("consumer-cluster-id")).Return(clustercache.ClusterInfo{}, false)
 			},
 			cacheMissTrackerMocks: func(tracker *mocks.Tracker[string]) {
