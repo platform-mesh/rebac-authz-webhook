@@ -214,16 +214,6 @@ func (c *contextualAuthorizer) handleKCPBindCheck(ctx context.Context, req autho
 	}
 	providerClusterName := providerCluster[0]
 
-	if _, ok := c.clusterCache.Get(multicluster.ClusterName(providerClusterName)); !ok {
-		if c.cacheMissTracker.ShouldRetry(providerClusterName) {
-			klog.V(5).InfoS("provider cluster not found in cache, retrying", "clusterName", providerClusterName)
-			c.cacheMissTracker.Retried(providerClusterName)
-			return authorization.Retry(c.cacheMissRetryAfter)
-		}
-		klog.V(5).InfoS("provider cluster not found in cache", "clusterName", providerClusterName)
-		return authorization.NoOpinion()
-	}
-
 	consumerClusterID := ""
 	for _, group := range req.Spec.Groups {
 		if id, ok := strings.CutPrefix(group, systemClusterPrefix); ok {
