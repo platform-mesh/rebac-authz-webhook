@@ -4,7 +4,7 @@
 # Platform Mesh - rebac-authz-webhook
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/platform-mesh/rebac-authz-webhook/badge)](https://scorecard.dev/viewer/?uri=github.com/platform-mesh/rebac-authz-webhook)
-![Build Status](https://github.com/platform-mesh/rebac-authz-webhook/actions/workflows/pipeline.yaml/badge.svg)
+![Build Status](https://github.com/platform-mesh/rebac-authz-webhook/actions/workflows/ci.yml/badge.svg)
 
 ## Description
 
