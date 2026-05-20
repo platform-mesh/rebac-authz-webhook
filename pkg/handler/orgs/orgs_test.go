@@ -8,6 +8,7 @@ import (
 	kcpcorev1alpha "github.com/kcp-dev/sdk/apis/core/v1alpha1"
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/authorization"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/orgs"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,6 @@ import (
 	v1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
 )
 
 func TestHandler(t *testing.T) {
@@ -94,7 +94,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			setupManagerMocks: func(mgr *mocks.Manager, cluster *mocks.Cluster, orgsClient *mocks.Client) {
-				mgr.EXPECT().GetCluster(mock.Anything, multicluster.ClusterName("root:orgs")).Return(nil, errors.New("cluster lookup failed"))
+				mgr.EXPECT().GetCluster(mock.Anything, config.MultiProviderName(config.CoreProviderName, "root:orgs")).Return(nil, errors.New("cluster lookup failed"))
 			},
 		},
 		{
@@ -115,7 +115,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			setupManagerMocks: func(mgr *mocks.Manager, cluster *mocks.Cluster, orgsClient *mocks.Client) {
-				mgr.EXPECT().GetCluster(mock.Anything, multicluster.ClusterName("root:orgs")).Return(cluster, nil)
+				mgr.EXPECT().GetCluster(mock.Anything, config.MultiProviderName(config.CoreProviderName, "root:orgs")).Return(cluster, nil)
 				cluster.EXPECT().GetClient().Return(orgsClient)
 				orgsClient.EXPECT().Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).Return(errors.New("get failed"))
 			},
@@ -138,7 +138,7 @@ func TestHandler(t *testing.T) {
 			},
 			res: authorization.NoOpinion(),
 			setupManagerMocks: func(mgr *mocks.Manager, cluster *mocks.Cluster, orgsClient *mocks.Client) {
-				mgr.EXPECT().GetCluster(mock.Anything, multicluster.ClusterName("root:orgs")).Return(cluster, nil)
+				mgr.EXPECT().GetCluster(mock.Anything, config.MultiProviderName(config.CoreProviderName, "root:orgs")).Return(cluster, nil)
 				cluster.EXPECT().GetClient().Return(orgsClient)
 				orgsClient.EXPECT().
 					Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).
@@ -230,7 +230,7 @@ func TestHandler(t *testing.T) {
 			if test.setupManagerMocks != nil {
 				test.setupManagerMocks(mgr, cluster, orgsClient)
 			} else {
-				mgr.EXPECT().GetCluster(mock.Anything, multicluster.ClusterName("root:orgs")).Return(cluster, nil).Maybe()
+				mgr.EXPECT().GetCluster(mock.Anything, config.MultiProviderName(config.CoreProviderName, "root:orgs")).Return(cluster, nil).Maybe()
 				cluster.EXPECT().GetClient().Return(orgsClient).Maybe()
 				orgsClient.EXPECT().
 					Get(mock.Anything, types.NamespacedName{Name: "cluster"}, mock.Anything).
