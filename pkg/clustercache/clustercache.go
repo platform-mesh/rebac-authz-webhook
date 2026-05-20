@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -67,6 +68,8 @@ func (c *clusterCache) Get(clusterName multicluster.ClusterName) (ClusterInfo, b
 func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName, cl cluster.Cluster) error {
 	klog.V(5).InfoS("Engaging cluster", "clusterName", name)
 
+	clusterName := config.StripProviderPrefix(name)
+
 	var lc unstructured.Unstructured
 	err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
 		lc = unstructured.Unstructured{}
@@ -76,22 +79,22 @@ func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName
 			Kind:    "LogicalCluster",
 		})
 		if err := cl.GetClient().Get(ctx, types.NamespacedName{Name: "cluster"}, &lc); err != nil {
-			klog.V(5).ErrorS(err, "Failed to get LogicalCluster, will retry", "clusterName", name)
+			klog.V(5).ErrorS(err, "Failed to get LogicalCluster, will retry", "clusterName", clusterName)
 			return false, nil
 		}
 		return true, nil
 	})
 	if err != nil {
-		klog.ErrorS(err, "Failed to get LogicalCluster, context cancelled", "clusterName", name)
+		klog.ErrorS(err, "Failed to get LogicalCluster, context cancelled", "clusterName", clusterName)
 		return err
 	}
 
 	annotationPath := lc.GetAnnotations()["kcp.io/path"]
-	klog.V(5).InfoS("Retrieved logical cluster path", "clusterName", name, "path", annotationPath)
+	klog.V(5).InfoS("Retrieved logical cluster path", "clusterName", clusterName, "path", annotationPath)
 
 	const orgsPrefix = "root:orgs:"
 	if !strings.HasPrefix(annotationPath, orgsPrefix) {
-		klog.V(5).InfoS("Cluster path does not have orgs prefix, skipping", "clusterName", name, "path", annotationPath)
+		klog.V(5).InfoS("Cluster path does not have orgs prefix, skipping", "clusterName", clusterName, "path", annotationPath)
 		return nil
 	}
 
@@ -100,11 +103,11 @@ func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName
 
 	parentClusterID, found, err := unstructured.NestedString(lc.Object, "spec", "owner", "cluster")
 	if err != nil {
-		klog.ErrorS(err, "Failed to get owner.cluster from LogicalCluster spec", "clusterName", name)
+		klog.ErrorS(err, "Failed to get owner.cluster from LogicalCluster spec", "clusterName", clusterName)
 		return err
 	}
 	if !found {
-		klog.Error("No owner.cluster found in LogicalCluster spec", "clusterName", name)
+		klog.Error("No owner.cluster found in LogicalCluster spec", "clusterName", clusterName)
 		return errors.New("owner.cluster not found in LogicalCluster spec")
 	}
 
@@ -117,30 +120,30 @@ func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName
 			Kind:    "Store",
 		})
 
-		orgsCluster, err := c.mgr.GetCluster(ctx, "root:orgs")
+		orgsCluster, err := c.mgr.GetCluster(ctx, config.MultiProviderName(config.SystemProviderName, "root:orgs"))
 		if err != nil {
 			return false, err
 		}
 		orgsClient := orgsCluster.GetClient()
 
 		if err := orgsClient.Get(ctx, types.NamespacedName{Name: orgName}, &store); err != nil {
-			klog.V(5).ErrorS(err, "Failed to get Store for org, will retry", "clusterName", name, "orgName", orgName)
+			klog.V(5).ErrorS(err, "Failed to get Store for org, will retry", "clusterName", clusterName, "orgName", orgName)
 			return false, nil
 		}
 		return true, nil
 	})
 	if err != nil {
-		klog.ErrorS(err, "Failed to get Store for org", "clusterName", name, "orgName", orgName)
+		klog.ErrorS(err, "Failed to get Store for org", "clusterName", clusterName, "orgName", orgName)
 		return err
 	}
 
 	storeID, found, err := unstructured.NestedString(store.Object, "status", "storeId")
 	if err != nil {
-		klog.ErrorS(err, "Failed to get storeId from Store status", "clusterName", name, "orgName", orgName)
+		klog.ErrorS(err, "Failed to get storeId from Store status", "clusterName", clusterName, "orgName", orgName)
 		return err
 	}
 	if !found {
-		klog.V(5).InfoS("storeId not found in Store status", "clusterName", name, "orgName", orgName)
+		klog.V(5).InfoS("storeId not found in Store status", "clusterName", clusterName, "orgName", orgName)
 		return errors.New("storeId not found in Store status")
 	}
 
@@ -151,7 +154,7 @@ func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName
 		return err
 	}
 
-	path, err := url.JoinPath("clusters", name.String())
+	path, err := url.JoinPath("clusters", clusterName)
 	if err != nil {
 		return err
 	}
@@ -170,7 +173,7 @@ func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName
 	}
 
 	c.lock.Lock()
-	c.cache[name] = ClusterInfo{
+	c.cache[multicluster.ClusterName(clusterName)] = ClusterInfo{
 		StoreID:         storeID,
 		RESTMapper:      restMapper,
 		AccountName:     accountName,
@@ -179,7 +182,7 @@ func (c *clusterCache) Engage(ctx context.Context, name multicluster.ClusterName
 	c.lock.Unlock()
 
 	klog.V(5).InfoS("Cached cluster info",
-		"clusterName", name,
+		"clusterName", clusterName,
 		"storeId", storeID,
 		"accountName", accountName,
 		"parentClusterID", parentClusterID)
