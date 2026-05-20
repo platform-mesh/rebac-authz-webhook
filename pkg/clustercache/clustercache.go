@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
@@ -50,12 +49,6 @@ func New(mgr mcmanager.Manager) (*clusterCache, error) {
 		cache: make(map[multicluster.ClusterName]ClusterInfo),
 		mgr:   mgr,
 	}, nil
-}
-
-func NewWithClient(orgsClient client.Client) *clusterCache {
-	return &clusterCache{
-		cache: make(map[multicluster.ClusterName]ClusterInfo),
-	}
 }
 
 func (c *clusterCache) Get(clusterName multicluster.ClusterName) (ClusterInfo, bool) {
