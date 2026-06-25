@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+	multiprovider "sigs.k8s.io/multicluster-runtime/providers/multi"
 
 	"github.com/kcp-dev/multicluster-provider/apiexport"
 	pathaware "github.com/kcp-dev/multicluster-provider/path-aware"
@@ -48,18 +49,29 @@ func NewServeCmd() *cobra.Command {
 				return otelhttp.NewTransport(rt)
 			})
 
-			endpointSliceName := serverCfg.APIExportEndpointSliceName
-			klog.InfoS("using endpoint slice name", "name", endpointSliceName)
-
-			provider, err := pathaware.New(restCfg, endpointSliceName, apiexport.Options{
+			systemProvider, err := pathaware.New(restCfg, serverCfg.APIExportEndpointSlices.SystemPlatformMeshIO, apiexport.Options{
 				Scheme: scheme,
 			})
 			if err != nil {
-				klog.Exit(err, "unable to construct cluster provider")
+				klog.Exit(err, "unable to create system apiexport provider")
+			}
+			coreProvider, err := pathaware.New(restCfg, serverCfg.APIExportEndpointSlices.CorePlatformMeshIO, apiexport.Options{
+				Scheme: scheme,
+			})
+			if err != nil {
+				klog.Exit(err, "unable to create core apiexport provider")
+			}
+
+			multiProv := multiprovider.New(multiprovider.Options{})
+			if err := multiProv.AddProvider(config.SystemProviderName, systemProvider); err != nil {
+				klog.Exit(err, "unable to add system apiexport provider")
+			}
+			if err := multiProv.AddProvider(config.CoreProviderName, coreProvider); err != nil {
+				klog.Exit(err, "unable to add core apiexport provider")
 			}
 
 			// Use Root KCP config for manager
-			mgr, err := mcmanager.New(restCfg, provider, mcmanager.Options{
+			mgr, err := mcmanager.New(restCfg, multiProv, mcmanager.Options{
 				Scheme: scheme,
 				Logger: klog.NewKlogr(),
 				WebhookServer: webhook.NewServer(webhook.Options{

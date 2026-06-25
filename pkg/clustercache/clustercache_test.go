@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/clustercache"
+	"github.com/platform-mesh/rebac-authz-webhook/pkg/config"
 	"github.com/platform-mesh/rebac-authz-webhook/pkg/handler/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -105,7 +106,7 @@ func TestClusterCache_Engage(t *testing.T) {
 				Return(tt.lcGetErr)
 
 			if tt.setupOrgsClient != nil {
-				mgr.EXPECT().GetCluster(mock.Anything, multicluster.ClusterName("root:orgs")).Return(orgsCluster, nil)
+				mgr.EXPECT().GetCluster(mock.Anything, config.MultiProviderName(config.SystemProviderName, "root:orgs")).Return(orgsCluster, nil)
 				orgsCluster.EXPECT().GetClient().Return(orgsClient)
 				tt.setupOrgsClient(orgsClient)
 			}

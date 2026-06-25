@@ -1,9 +1,17 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
+	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
+)
+
+const (
+	CoreProviderName   = "core"
+	SystemProviderName = "system"
+	providerSeparator  = "#"
 )
 
 type WebhookConfig struct {
@@ -21,6 +29,11 @@ type WebhookConfig struct {
 	CacheMissRetryAfter time.Duration
 }
 
+type APIExportEndpointSlices struct {
+	CorePlatformMeshIO   string
+	SystemPlatformMeshIO string
+}
+
 type Config struct {
 	MetricsBindAddress     string
 	HealthProbeBindAddress string
@@ -28,7 +41,7 @@ type Config struct {
 
 	Webhook WebhookConfig
 
-	APIExportEndpointSliceName string
+	APIExportEndpointSlices APIExportEndpointSlices
 }
 
 func New() *Config {
@@ -45,8 +58,10 @@ func New() *Config {
 			CacheMissCleanupInterval:   2 * time.Minute,
 			CacheMissRetryAfter:        1 * time.Second,
 		},
-
-		APIExportEndpointSliceName: "core.platform-mesh.io",
+		APIExportEndpointSlices: APIExportEndpointSlices{
+			CorePlatformMeshIO:   "core.platform-mesh.io",
+			SystemPlatformMeshIO: "system.platform-mesh.io",
+		},
 	}
 }
 
@@ -61,5 +76,19 @@ func (cfg *Config) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&cfg.Webhook.CacheMissTTL, "webhook-cache-miss-ttl", cfg.Webhook.CacheMissTTL, "Duration after which cache miss count resets for a cluster")
 	fs.DurationVar(&cfg.Webhook.CacheMissCleanupInterval, "webhook-cache-miss-cleanup-interval", cfg.Webhook.CacheMissCleanupInterval, "Interval at which cache miss keys are checked for expiration")
 	fs.DurationVar(&cfg.Webhook.CacheMissRetryAfter, "webhook-cache-miss-retry-after", cfg.Webhook.CacheMissRetryAfter, "Delay before retrying on cache miss")
-	fs.StringVar(&cfg.APIExportEndpointSliceName, "kcp-api-export-endpoint-slice-name", cfg.APIExportEndpointSliceName, "Set the KCP API export endpoint slice name")
+	fs.StringVar(&cfg.APIExportEndpointSlices.CorePlatformMeshIO, "core-api-export-endpoint-slice-name", cfg.APIExportEndpointSlices.CorePlatformMeshIO, "Set the core.platform-mesh.io APIExportEndpointSlice name")
+	fs.StringVar(&cfg.APIExportEndpointSlices.SystemPlatformMeshIO, "system-api-export-endpoint-slice-name", cfg.APIExportEndpointSlices.SystemPlatformMeshIO, "Set the system.platform-mesh.io APIExportEndpointSlice name")
+}
+
+// StripProviderPrefix removes the provider prefix from a cluster name "core#1kar1u6c65ykt4ea" -> "1kar1u6c65ykt4ea".
+func StripProviderPrefix(clusterName multicluster.ClusterName) string {
+	if _, after, ok := strings.Cut(clusterName.String(), providerSeparator); ok {
+		return after
+	}
+	return clusterName.String()
+}
+
+// MultiProviderName returns a cluster name with provider prefix and separator for multi provider.
+func MultiProviderName(providerName, clusterName string) multicluster.ClusterName {
+	return multicluster.ClusterName(providerName + providerSeparator + clusterName)
 }
